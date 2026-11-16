@@ -1,7 +1,14 @@
+x-import-storage-path: &import-storage-path /data/imports
+x-import-volume: &import-volume
+  type: volume
+  source: import-data
+  target: *import-storage-path
+
 x-application: &application
   build: .
   environment:
     METRICS_SRV_ENV: ${METRICS_SRV_ENV:-development}
+    METRICS_SRV_REQUIRED_STORAGE_PATH: *import-storage-path
   volumes:
     - ./config.yaml:/app/config.yaml:ro
     - application-secret:/run/secrets:ro
@@ -113,7 +120,7 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - application-secret:/run/secrets:ro
-      - import-data:/data/imports
+      - *import-volume
     depends_on: &application-dependencies
       postgres:
         condition: service_healthy
@@ -129,7 +136,7 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - application-secret:/run/secrets:ro
-      - import-data:/data/imports
+      - *import-volume
     depends_on: *application-dependencies
     restart: unless-stopped
 
@@ -139,7 +146,7 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - application-secret:/run/secrets:ro
-      - import-data:/data/imports
+      - *import-volume
     depends_on: *application-dependencies
     restart: unless-stopped
 

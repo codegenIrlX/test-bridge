@@ -4,9 +4,10 @@ import argparse
 import asyncio
 import logging
 
-import uvicorn
-
 from metrics_srv.config import load_settings
+from metrics_srv.db.session import create_database_engine, create_session_factory
+from metrics_srv.domains.imports.repository import ImportRepository
+from metrics_srv.domains.imports.services import ImportService
 
 
 def main() -> None:
@@ -16,18 +17,35 @@ def main() -> None:
     role = parser.parse_args().role
     logging.basicConfig(level=logging.INFO)
     settings = load_settings()
-    if role == "api":
-        from metrics_srv.api import create_app
+    if role == "migrate":
+        from metrics_srv.migrations import upgrade_database
 
-        uvicorn.run(create_app(settings), host="0.0.0.0", port=8000)
-    elif role == "migrate":
-        from metrics_srv.repository import Repository
+        upgrade_database(settings)
+        return
 
-        Repository(settings).migrate()
-    else:
-        from metrics_srv.background import run_processor, run_scheduler
+    engine = create_database_engine(settings)
+    try:
+        sessions = create_session_factory(engine)
+        repository = ImportRepository()
+        service = ImportService(settings, sessions, repository)
+        if role == "api":
+            import uvicorn
 
-        asyncio.run(run_scheduler(settings) if role == "scheduler" else run_processor(settings))
+            from metrics_srv.api import create_app
+
+            uvicorn.run(create_app(settings, service), host="0.0.0.0", port=8000)
+        elif role == "scheduler":
+            from metrics_srv.domains.imports.cleanup import ArchiveCleanup
+            from metrics_srv.workers.scheduler import run_scheduler
+
+            asyncio.run(run_scheduler(settings, service, ArchiveCleanup(settings, sessions, repository)))
+        else:
+            from metrics_srv.domains.imports.processing import ImportProcessor
+            from metrics_srv.workers.processor import run_processor
+
+            asyncio.run(run_processor(settings, service, ImportProcessor(settings, engine, repository)))
+    finally:
+        engine.dispose()
 
 
 if __name__ == "__main__":

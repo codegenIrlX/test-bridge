@@ -100,6 +100,10 @@ def load_settings(
     redis = _section(config, "redis")
     storage = _section(config, "storage")
     scheduler = _section(config, "scheduler")
+    storage_path = Path(_text(storage, "path"))
+    required_storage_path = os.getenv("METRICS_SRV_REQUIRED_STORAGE_PATH")
+    if required_storage_path is not None and storage_path != Path(required_storage_path):
+        raise SettingsError("Параметр storage.path должен совпадать с путём общего тома архивов")
     return Settings(
         database_host=_text(database, "host"),
         database_port=_positive_int(database, "port", 65535),
@@ -108,7 +112,7 @@ def load_settings(
         database_password=_text(_section(secrets, "database"), "password"),
         redis_host=_text(redis, "host"),
         redis_port=_positive_int(redis, "port", 65535),
-        storage_path=Path(_text(storage, "path")),
+        storage_path=storage_path,
         max_archive_bytes=_positive_int(storage, "max_archive_bytes"),
         max_uncompressed_bytes=_positive_int(storage, "max_uncompressed_bytes"),
         max_result_files=_positive_int(storage, "max_result_files"),

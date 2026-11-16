@@ -1,36 +1,44 @@
+from collections.abc import Iterator
+from io import BytesIO
 from pathlib import Path
+from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from metrics_srv.api import create_app
 from metrics_srv.config import Settings
+from metrics_srv.domains.imports.models import Import
+from metrics_srv.domains.imports.repository import ImportRepository, ImportState
+from metrics_srv.domains.imports.services import ImportService
 
 
-class FakeRepository:
+class FakeRepository(ImportRepository):
+    """Хранит импорты в памяти для тестов HTTP и файлового сценария."""
+
     def __init__(self) -> None:
-        self.rows: dict[UUID, dict] = {}
+        self.rows: dict[UUID, Import] = {}
 
-    def create_import(self, import_id: UUID) -> None:
-        self.rows[import_id] = {
-            "id": import_id,
-            "status": "pending",
-            "error_message": None,
-            "archive_deleted": False,
-        }
+    def create_import(self, session: Session, import_id: UUID) -> None:
+        self.rows[import_id] = Import(
+            id=import_id, status="pending", error_message=None, archive_deleted=False, attempt_count=0,
+        )
 
-    def get_import(self, import_id: UUID) -> dict | None:
-        return self.rows.get(import_id)
-
-    def retry_import(self, import_id: UUID) -> str:
+    def get_import(self, session: Session, import_id: UUID) -> ImportState | None:
         row = self.rows.get(import_id)
         if row is None:
-            return "not_found"
-        if row["status"] != "failed":
-            return "conflict"
-        row.update(status="pending", error_message=None, archive_deleted=False)
-        return "pending"
+            return None
+        return {
+            "id": row.id,
+            "status": row.status,
+            "error_message": row.error_message,
+            "archive_deleted": row.archive_deleted,
+        }
+
+    def lock_import(self, session: Session, import_id: UUID) -> Import | None:
+        return self.rows.get(import_id)
 
 
 @pytest.fixture
@@ -53,8 +61,19 @@ def settings(tmp_path: Path) -> Settings:
 
 
 @pytest.fixture
-def client(settings: Settings) -> TestClient:
-    return TestClient(create_app(settings, FakeRepository()), raise_server_exceptions=False)
+def repository() -> FakeRepository:
+    return FakeRepository()
+
+
+@pytest.fixture
+def service(settings: Settings, repository: FakeRepository) -> ImportService:
+    return ImportService(settings, MagicMock(), repository)
+
+
+@pytest.fixture
+def client(settings: Settings, service: ImportService) -> Iterator[TestClient]:
+    with TestClient(create_app(settings, service), raise_server_exceptions=False) as client:
+        yield client
 
 
 def test_upload_and_fetch_status(client: TestClient, settings: Settings) -> None:
@@ -180,12 +199,15 @@ def test_missing_file_returns_validation_error(client: TestClient) -> None:
     assert response.json()["error"]["code"] == "validation_error"
 
 
-def test_failed_import_can_be_retried(settings: Settings) -> None:
-    repository = FakeRepository()
-    import_id = uuid4()
-    repository.create_import(import_id)
-    repository.rows[import_id].update(status="failed", error_message="failed")
-    client = TestClient(create_app(settings, repository), raise_server_exceptions=False)
+def test_failed_import_can_be_retried(
+    client: TestClient, service: ImportService, repository: FakeRepository,
+) -> None:
+    record = service.upload(BytesIO(b"archive"), None)
+    import_id = record["id"]
+    row = repository.rows[import_id]
+    row.status = "failed"
+    row.error_message = "failed"
+    row.attempt_count = 3
 
     response = client.post(
         f"/api/v1/imports/{import_id}/retry", headers={"Authorization": "Bearer fake-token"}
@@ -194,15 +216,17 @@ def test_failed_import_can_be_retried(settings: Settings) -> None:
     assert response.status_code == 202
     assert response.json()["importId"] == str(import_id)
     assert response.json()["status"] == "pending"
-    assert repository.rows[import_id]["error_message"] is None
+    assert row.error_message is None
+    assert row.attempt_count == 0
 
 
-def test_retry_rejects_missing_or_incomplete_imports(settings: Settings) -> None:
-    repository = FakeRepository()
-    pending_id = uuid4()
-    repository.create_import(pending_id)
-    client = TestClient(create_app(settings, repository), raise_server_exceptions=False)
+def test_retry_rejects_missing_or_incomplete_imports(client: TestClient) -> None:
     headers = {"Authorization": "Bearer fake-token"}
+    uploaded = client.post(
+        "/api/v1/imports", headers=headers, files={"file": ("results.zip", b"archive")},
+    )
+    assert uploaded.status_code == 202
+    pending_id = uploaded.json()["importId"]
 
     missing = client.post(f"/api/v1/imports/{uuid4()}/retry", headers=headers)
     conflict = client.post(f"/api/v1/imports/{pending_id}/retry", headers=headers)
@@ -215,14 +239,14 @@ def test_retry_rejects_missing_or_incomplete_imports(settings: Settings) -> None
 
 def test_unexpected_error_is_safe(settings: Settings) -> None:
     class FailingRepository(FakeRepository):
-        def get_import(self, import_id: UUID) -> dict | None:
+        def get_import(self, session: Session, import_id: UUID) -> ImportState | None:
             raise RuntimeError("private database detail")
 
-    client = TestClient(create_app(settings, FailingRepository()), raise_server_exceptions=False)
-
-    response = client.get(
-        f"/api/v1/imports/{uuid4()}", headers={"Authorization": "Bearer fake-token"}
-    )
+    service = ImportService(settings, MagicMock(), FailingRepository())
+    with TestClient(create_app(settings, service), raise_server_exceptions=False) as client:
+        response = client.get(
+            f"/api/v1/imports/{uuid4()}", headers={"Authorization": "Bearer fake-token"}
+        )
 
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "internal_error"
@@ -238,8 +262,24 @@ def test_swagger_schema_describes_upload_status_and_authorization(client: TestCl
     status = schema["paths"]["/api/v1/imports/{import_id}"]["get"]
     retry = schema["paths"]["/api/v1/imports/{import_id}/retry"]["post"]
     assert "multipart/form-data" in upload["requestBody"]["content"]
-    assert {"202", "401", "413", "422", "500"}.issubset(upload["responses"])
+    assert {"202", "401", "409", "413", "422", "500"}.issubset(upload["responses"])
+    key, = upload["parameters"]
+    assert key["name"] == "Idempotency-Key" and key["in"] == "header"
+    assert key["required"] is False
     assert {"200", "401", "404", "422", "500"}.issubset(status["responses"])
     assert {"202", "401", "404", "409", "422", "500"}.issubset(retry["responses"])
     assert upload["security"] and status["security"] and retry["security"]
     assert client.get("/docs").status_code == 200
+
+
+@pytest.mark.parametrize("key", ["", "with space", "a" * 129])
+def test_upload_rejects_invalid_idempotency_key(
+    client: TestClient, settings: Settings, key: str,
+) -> None:
+    response = client.post(
+        "/api/v1/imports", headers={"Authorization": "Bearer fake-token", "Idempotency-Key": key},
+        files={"file": ("results.zip", b"archive")},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert not list(settings.storage_path.iterdir())
