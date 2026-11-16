@@ -14,8 +14,5 @@ default:
     max_result_files: 10000
   scheduler:
     interval_seconds: 5
-  metrics:
-    project_allowlist: []
-    suite_allowlist: []
 
 development: {}

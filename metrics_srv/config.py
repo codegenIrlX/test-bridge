@@ -31,8 +31,6 @@ class Settings:
     max_result_files: int
     scheduler_interval_seconds: int
     api_token: str = field(repr=False)
-    metrics_project_allowlist: tuple[str, ...] = ()
-    metrics_suite_allowlist: tuple[str, ...] = ()
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -85,53 +83,23 @@ def _positive_int(section: dict[str, Any], name: str, maximum: int | None = None
     return value
 
 
-def _text_list(section: dict[str, Any], name: str) -> tuple[str, ...]:
-    value = section.get(name, [])
-    if not isinstance(value, list) or any(
-        not isinstance(item, str) or not item.strip() or "\n" in item or "\r" in item
-        for item in value
-    ):
-        raise SettingsError(f"Параметр {name} должен быть списком непустых строк")
-    if len(value) != len(set(value)):
-        raise SettingsError(f"Параметр {name} содержит повторяющиеся значения")
-    if any(item.casefold() in {"other", "unknown"} for item in value):
-        raise SettingsError(f"Параметр {name} содержит зарезервированное значение")
-    return tuple(value)
-
-
-def _selected_environment() -> str:
-    environment = os.getenv("METRICS_SRV_ENV", "development")
-    if not environment or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for char in environment):
-        raise SettingsError("METRICS_SRV_ENV должен содержать имя одного окружения")
-    return environment
-
-
-def _secrets_path(secrets_path: Path | None) -> Path:
-    if secrets_path is None:
-        docker_secret = Path("/run/secrets/secrets.yaml")
-        secrets_path = docker_secret if docker_secret.is_file() else Path("secrets.yaml")
-    return secrets_path
-
-
-def load_grafana_database_password(secrets_path: Path | None = None) -> str:
-    """Прочитать пароль учётной записи Grafana для выбранного окружения."""
-    secrets = _environment(_read_yaml(_secrets_path(secrets_path)), _selected_environment())
-    return _text(_section(secrets, "grafana"), "database_password")
-
-
 def load_settings(
     config_path: Path = Path("config.yaml"), secrets_path: Path | None = None
 ) -> Settings:
     """Прочитать настройки выбранного окружения и проверить обязательные поля."""
-    environment = _selected_environment()
-    secrets_path = _secrets_path(secrets_path)
+    environment = os.getenv("METRICS_SRV_ENV", "development")
+    if not environment or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for char in environment):
+        raise SettingsError("METRICS_SRV_ENV должен содержать имя одного окружения")
+
+    if secrets_path is None:
+        docker_secret = Path("/run/secrets/secrets.yaml")
+        secrets_path = docker_secret if docker_secret.is_file() else Path("secrets.yaml")
     config = _environment(_read_yaml(config_path), environment)
     secrets = _environment(_read_yaml(secrets_path), environment)
     database = _section(config, "database")
     redis = _section(config, "redis")
     storage = _section(config, "storage")
     scheduler = _section(config, "scheduler")
-    metrics = _section(config, "metrics")
     return Settings(
         database_host=_text(database, "host"),
         database_port=_positive_int(database, "port", 65535),
@@ -146,6 +114,4 @@ def load_settings(
         max_result_files=_positive_int(storage, "max_result_files"),
         scheduler_interval_seconds=_positive_int(scheduler, "interval_seconds"),
         api_token=_text(_section(secrets, "api"), "token"),
-        metrics_project_allowlist=_text_list(metrics, "project_allowlist"),
-        metrics_suite_allowlist=_text_list(metrics, "suite_allowlist"),
     )

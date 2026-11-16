@@ -105,19 +105,3 @@ def test_invalid_limit_is_rejected(
 
     with pytest.raises(SettingsError):
         load_settings(config_path, secrets_path)
-
-
-@pytest.mark.parametrize("field", ["project_allowlist", "suite_allowlist"])
-@pytest.mark.parametrize("reserved", ["other", "UNKNOWN", "Other", "unknown"])
-def test_metrics_allowlist_rejects_reserved_labels(
-    configuration_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
-    field: str, reserved: str,
-) -> None:
-    monkeypatch.setenv("METRICS_SRV_ENV", "development")
-    config_path, secrets_path = configuration_files
-    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    config["default"]["metrics"] = {field: [reserved]}
-    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
-
-    with pytest.raises(SettingsError):
-        load_settings(config_path, secrets_path)

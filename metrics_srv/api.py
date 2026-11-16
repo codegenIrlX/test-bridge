@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 import logging
 import os
@@ -11,13 +10,11 @@ from tempfile import NamedTemporaryFile
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi import Path as ApiPath
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from psycopg import Error as DatabaseError
-from redis.exceptions import RedisError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -37,7 +34,6 @@ ERROR_RESPONSES = {
     413: {"model": ErrorResponseDto, "description": "Архив превышает допустимый размер"},
     422: {"model": ErrorResponseDto, "description": "Некорректный запрос"},
     500: {"model": ErrorResponseDto, "description": "Внутренняя ошибка сервиса"},
-    503: {"model": ErrorResponseDto, "description": "Источник метрик недоступен"},
 }
 
 
@@ -129,26 +125,14 @@ def create_app(settings: Settings | None = None, repository: Repository | None =
     @app.post(
         "/api/v1/imports", response_model=ImportResponseDto, status_code=202,
         summary="Принять ZIP с результатами Allure",
-        responses={k: ERROR_RESPONSES[k] for k in (400, 401, 409, 413, 422, 500)},
+        responses={k: ERROR_RESPONSES[k] for k in (400, 401, 413, 422, 500)},
         dependencies=[Depends(authorize)],
     )
-    def upload_import(
-        file: Annotated[UploadFile, File(description="ZIP с результатами Allure")],
-        project: Annotated[str | None, Form(max_length=255, description="Проект CI")] = None,
-        job: Annotated[str | None, Form(max_length=255, description="Задание CI")] = None,
-        build_number: Annotated[str | None, Form(alias="buildNumber", max_length=255,
-                                description="Номер сборки CI")] = None,
-        build_url: Annotated[str | None, Form(alias="buildUrl", max_length=2048,
-                             description="Ссылка на сборку CI")] = None,
-        revision: Annotated[str | None, Form(max_length=255, description="Ревизия кода")] = None,
-        idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", min_length=1,
-                                   max_length=255, description="Ключ повтора отправки")] = None,
-    ) -> ImportResponseDto:
+    def upload_import(file: Annotated[UploadFile, File(description="ZIP с результатами Allure")]) -> ImportResponseDto:
         settings.storage_path.mkdir(parents=True, exist_ok=True)
         import_id = uuid4()
         target = settings.storage_path / f"{import_id}.zip"
         temporary: Path | None = None
-        digest = hashlib.sha256()
         try:
             with NamedTemporaryFile(dir=settings.storage_path, prefix="upload-", suffix=".tmp", delete=False) as stream:
                 temporary = Path(stream.name)
@@ -159,60 +143,16 @@ def create_app(settings: Settings | None = None, repository: Repository | None =
                     if size > settings.max_archive_bytes:
                         raise HTTPException(413, "Архив превышает допустимый размер")
                     stream.write(chunk)
-                    digest.update(chunk)
                 stream.flush()
                 os.fsync(stream.fileno())
                 os.utime(temporary, None)
             temporary.replace(target)
-            if any(value is not None for value in (
-                project, job, build_number, build_url, revision, idempotency_key,
-            )):
-                row = repository.create_import(
-                    import_id, project=project, job=job, build_number=build_number,
-                    build_url=build_url, revision=revision, idempotency_key=idempotency_key,
-                    archive_sha256=digest.hexdigest(),
-                )
-                if row["id"] != import_id:
-                    target.unlink(missing_ok=True)
-                    metadata = {
-                        "project": project, "job": job, "build_number": build_number,
-                        "build_url": build_url, "revision": revision,
-                    }
-                    if row["archive_sha256"] != digest.hexdigest() or any(
-                        row[name] != value for name, value in metadata.items()
-                    ):
-                        raise HTTPException(409, "Ключ уже использован для другого запроса")
-                    return ImportResponseDto(
-                        importId=row["id"], status=row["status"],
-                        errorMessage=row["error_message"], archiveDeleted=row["archive_deleted"],
-                    )
-            else:
-                repository.create_import(import_id)
+            repository.create_import(import_id)
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
             file.file.close()
         return ImportResponseDto(importId=import_id, status="pending")
-
-    @app.get(
-        "/metrics", summary="Получить агрегированные метрики",
-        response_class=Response,
-        responses={
-            200: {"description": "Метрики Prometheus", "content": {"text/plain": {"schema": {
-                "type": "string"
-            }}}},
-            401: ERROR_RESPONSES[401], 503: ERROR_RESPONSES[503],
-        },
-        dependencies=[Depends(authorize)],
-    )
-    def metrics() -> Response:
-        from metrics_srv.metrics import render_metrics
-
-        try:
-            body = render_metrics(repository, settings)
-        except (DatabaseError, RedisError, OSError):
-            raise HTTPException(503, "Источник метрик недоступен") from None
-        return Response(content=body, media_type="text/plain; version=0.0.4; charset=utf-8")
 
     @app.get(
         "/api/v1/imports/{import_id}", response_model=ImportResponseDto,
