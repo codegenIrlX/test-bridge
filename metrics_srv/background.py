@@ -8,10 +8,11 @@ import signal
 from uuid import UUID
 
 from bullmq import Job, Queue, Worker
-from psycopg import Error as DatabaseError
 from redis.exceptions import RedisError
+from sqlalchemy.exc import DBAPIError
 
 from metrics_srv.config import Settings
+from metrics_srv.import_processing import ImportProcessor
 from metrics_srv.repository import Repository
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ async def run_scheduler(settings: Settings) -> None:
                     )
                 await asyncio.to_thread(repository.cleanup_completed)
                 await asyncio.to_thread(repository.cleanup_orphans)
-            except (DatabaseError, RedisError, OSError) as exc:
+            except (DBAPIError, RedisError, OSError) as exc:
                 logger.error("Ошибка цикла Scheduler: %s", type(exc).__name__)
             try:
                 await asyncio.wait_for(stop.wait(), timeout=settings.scheduler_interval_seconds)
@@ -65,11 +66,12 @@ async def run_scheduler(settings: Settings) -> None:
 async def run_processor(settings: Settings) -> None:
     """Принимать задания очереди и сохранять результаты импорта."""
     repository = Repository(settings)
+    processor = ImportProcessor(settings, repository)
     stop = _shutdown_event()
 
-    async def process(job: object, token: str) -> None:
+    async def process(job: Job, token: str) -> None:
         import_id = UUID(job.data["importId"])
-        await asyncio.to_thread(repository.process_import, import_id)
+        await asyncio.to_thread(processor.process_import, import_id)
         result = await asyncio.to_thread(repository.get_import, import_id)
         if result is not None and result["status"] == "failed":
             raise RuntimeError("Ошибка обработки архива Allure")

@@ -71,6 +71,7 @@ def test_processor_marks_failed_import_as_failed_queue_job(monkeypatch, status):
     import_id = uuid4()
     repository = MagicMock()
     repository.get_import.return_value = {"status": status}
+    processor = MagicMock()
     worker = MagicMock()
     worker.close = AsyncMock()
     captured = {}
@@ -83,6 +84,7 @@ def test_processor_marks_failed_import_as_failed_queue_job(monkeypatch, status):
     stop = MagicMock()
     stop.wait = AsyncMock()
     monkeypatch.setattr(background, "Repository", lambda settings: repository)
+    monkeypatch.setattr(background, "ImportProcessor", lambda settings, repository: processor)
     monkeypatch.setattr(background, "Worker", make_worker)
     monkeypatch.setattr(background, "_shutdown_event", lambda: stop)
     monkeypatch.setattr(background.asyncio, "to_thread", immediate_thread)
@@ -97,5 +99,5 @@ def test_processor_marks_failed_import_as_failed_queue_job(monkeypatch, status):
             callback(job, "token").send(None)
     else:
         finish(callback(job, "token"))
-    repository.process_import.assert_called_once_with(import_id)
+    processor.process_import.assert_called_once_with(import_id)
     worker.close.assert_awaited_once()

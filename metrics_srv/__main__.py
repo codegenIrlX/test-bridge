@@ -21,9 +21,9 @@ def main() -> None:
 
         uvicorn.run(create_app(settings), host="0.0.0.0", port=8000)
     elif role == "migrate":
-        from metrics_srv.repository import Repository
+        from metrics_srv.migrations import upgrade_database
 
-        Repository(settings).migrate()
+        upgrade_database(settings)
     else:
         from metrics_srv.background import run_processor, run_scheduler
 

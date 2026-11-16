@@ -5,6 +5,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.pool import NullPool
 
 from metrics_srv import filelocks
 from metrics_srv.repository import Repository
@@ -12,12 +14,12 @@ from metrics_srv.repository import Repository
 
 @pytest.fixture
 def orphan_repository(tmp_path: Path) -> Repository:
-    repository = Repository(SimpleNamespace(storage_path=tmp_path))
-    context = MagicMock()
-    context.__enter__.return_value.execute.return_value.fetchone.return_value = None
-    context.__exit__.return_value = False
-    repository.connect = MagicMock(return_value=context)
-    return repository
+    engine = create_engine(
+        "sqlite://",
+        poolclass=NullPool,
+        creator=MagicMock(side_effect=AssertionError("Upload cleanup accessed the database")),
+    )
+    return Repository(SimpleNamespace(storage_path=tmp_path), engine=engine)
 
 
 @pytest.fixture
