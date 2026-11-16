@@ -14,6 +14,8 @@ services:
       - application-secret:/run/secret-volume:ro
       - postgres-bootstrap:/run/postgres-bootstrap:ro
       - board-auth:/run/board-auth:ro
+      - grafana-auth:/run/grafana-auth:ro
+      - otel-auth:/run/otel-auth:ro
     restart: unless-stopped
 
   secret-bootstrap:
@@ -143,6 +145,86 @@ services:
     depends_on: *application-dependencies
     restart: unless-stopped
 
+  grafana-bootstrap:
+    <<: *application
+    command: ["python", "deploy/grafana-bootstrap.py"]
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - application-secret:/run/secrets:ro
+      - grafana-auth:/run/grafana-auth
+    depends_on:
+      secret-bootstrap:
+        condition: service_completed_successfully
+
+  grafana-database-bootstrap:
+    <<: *application
+    command: ["python", "deploy/grafana-database-bootstrap.py"]
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - application-secret:/run/secrets:ro
+      - grafana-auth:/run/grafana-auth
+    depends_on:
+      secret-bootstrap:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+
+  otel-auth-bootstrap:
+    <<: *application
+    command: ["python", "deploy/otel-bootstrap.py"]
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - application-secret:/run/secrets:ro
+      - otel-auth:/run/otel-auth
+    depends_on:
+      secret-bootstrap:
+        condition: service_completed_successfully
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - otel-auth:/run/otel-auth:ro
+    depends_on:
+      otel-auth-bootstrap:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+      victoriametrics:
+        condition: service_started
+    restart: unless-stopped
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.116.0
+    command: ["-storageDataPath=/storage"]
+    volumes:
+      - victoria-data:/storage
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/grafana-auth/password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana-auth:/run/grafana-auth:ro
+      - grafana-data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-auth:/etc/grafana/provisioning/datasources:ro
+      - ./deploy/grafana/dashboards:/var/lib/testbridge-dashboards:ro
+    depends_on:
+      grafana-bootstrap:
+        condition: service_completed_successfully
+      grafana-database-bootstrap:
+        condition: service_completed_successfully
+      victoriametrics:
+        condition: service_started
+    restart: unless-stopped
+
 secrets:
   settings:
     file: ./secrets.yaml
@@ -151,6 +233,20 @@ volumes:
   postgres-data:
   redis-data:
   import-data:
+  victoria-data:
+  grafana-data:
+  grafana-auth:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=1777
+  otel-auth:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=1777
   board-auth:
     driver: local
     driver_opts:

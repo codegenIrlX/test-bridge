@@ -20,6 +20,7 @@ class ParsedStep:
     start: int | None
     stop: int | None
     steps: list[ParsedStep]
+    status: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +31,56 @@ class ParsedTest:
     start: int | None
     stop: int | None
     steps: list[ParsedStep]
+    status: str | None = None
+    uuid: str | None = None
+    history_id: str | None = None
+    test_case_id: str | None = None
+    full_name: str | None = None
+    labels: list[dict[str, str]] | None = None
+    parameters: list[dict] | None = None
+
+
+def _optional_text(value: dict, key: str) -> str | None:
+    result = value.get(key)
+    if result is not None and not isinstance(result, str):
+        raise InvalidArchiveError("Некорректное поле результата Allure")
+    return result
+
+
+def _parse_test(value: object) -> ParsedTest:
+    item = _parse_item(value)
+    # _parse_item validates the root as an object.
+    labels = value.get("labels", [])
+    parameters = value.get("parameters", [])
+    if not isinstance(labels, list) or not isinstance(parameters, list):
+        raise InvalidArchiveError("Некорректные метки или параметры Allure")
+    selected = {"suite", "parentSuite", "subSuite", "tag", "framework", "language"}
+    parsed_labels = []
+    for label in labels:
+        if not isinstance(label, dict):
+            raise InvalidArchiveError("Некорректная метка Allure")
+        name, label_value = label.get("name"), label.get("value")
+        if not isinstance(name, str) or not isinstance(label_value, str):
+            raise InvalidArchiveError("Некорректная метка Allure")
+        if name in selected:
+            parsed_labels.append({"name": name, "value": label_value})
+    if any(not isinstance(parameter, dict) for parameter in parameters):
+        raise InvalidArchiveError("Некорректный параметр Allure")
+    parsed_parameters = []
+    for parameter in parameters:
+        mode = parameter.get("mode")
+        if mode is not None and not isinstance(mode, str):
+            raise InvalidArchiveError("Некорректный режим параметра Allure")
+        if mode and mode.lower() in {"masked", "hidden"}:
+            parsed_parameters.append({key: parameter[key] for key in ("name", "mode") if key in parameter})
+        else:
+            parsed_parameters.append(parameter)
+    return ParsedTest(
+        item.name, item.start, item.stop, item.steps, item.status,
+        _optional_text(value, "uuid"), _optional_text(value, "historyId"),
+        _optional_text(value, "testCaseId"), _optional_text(value, "fullName"),
+        parsed_labels, parsed_parameters,
+    )
 
 
 def _parse_item(value: object, depth: int = 0) -> ParsedStep:
@@ -47,7 +98,10 @@ def _parse_item(value: object, depth: int = 0) -> ParsedStep:
     steps = value.get("steps", [])
     if not isinstance(steps, list):
         raise InvalidArchiveError("Некорректный список шагов")
-    return ParsedStep(name, times[0], times[1], [_parse_item(step, depth + 1) for step in steps])
+    return ParsedStep(
+        name, times[0], times[1], [_parse_item(step, depth + 1) for step in steps],
+        _optional_text(value, "status"),
+    )
 
 
 def parse_archive(
@@ -68,8 +122,7 @@ def parse_archive(
                 raise InvalidArchiveError("Превышен размер результатов после распаковки")
             result = []
             for entry in entries:
-                item = _parse_item(json.loads(archive.read(entry)))
-                result.append(ParsedTest(item.name, item.start, item.stop, item.steps))
+                result.append(_parse_test(json.loads(archive.read(entry))))
             return result
     except (BadZipFile, EOFError, json.JSONDecodeError, UnicodeDecodeError, RuntimeError) as exc:
         raise InvalidArchiveError("Не удалось прочитать результаты Allure") from exc

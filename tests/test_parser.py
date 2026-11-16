@@ -73,6 +73,101 @@ def test_parse_multiple_results_without_steps_or_times(tmp_path: Path) -> None:
     assert all(test.start is None and test.stop is None and not test.steps for test in tests)
 
 
+@pytest.mark.parametrize("status", ["passed", "failed", "broken", "skipped", "unknown"])
+def test_parse_status_and_allure_identity(tmp_path: Path, status: str) -> None:
+    result = {
+        "name": "Parameterized test",
+        "status": status,
+        "uuid": "attempt-1",
+        "historyId": "history-1",
+        "testCaseId": "case-1",
+        "fullName": "suite.test_parameterized",
+        "labels": [
+            {"name": "suite", "value": "suite-a"},
+            {"name": "tag", "value": "smoke"},
+            {"name": "tag", "value": "api"},
+        ],
+        "parameters": [{"name": "region", "value": "test-region"}],
+        "steps": [
+            {"name": "First", "status": "failed", "steps": [
+                {"name": "Nested", "status": "broken"}
+            ]}
+        ],
+    }
+    archive = write_archive(tmp_path / "results.zip", {"one-result.json": json.dumps(result)})
+
+    tests = parse_archive(archive, max_uncompressed_bytes=100_000, max_result_files=10)
+
+    assert len(tests) == 1
+    test = tests[0]
+    assert test.status == status
+    assert (test.uuid, test.history_id, test.test_case_id, test.full_name) == (
+        "attempt-1", "history-1", "case-1", "suite.test_parameterized"
+    )
+    assert test.labels == result["labels"]
+    assert test.parameters == result["parameters"]
+    assert test.steps[0].status == "failed"
+    assert test.steps[0].steps[0].status == "broken"
+
+
+def test_parse_attempts_and_missing_optional_fields(tmp_path: Path) -> None:
+    archive = write_archive(
+        tmp_path / "results.zip",
+        {
+            "one-result.json": json.dumps(
+                {"name": "Test", "uuid": "first", "historyId": "same", "status": "failed"}
+            ),
+            "two-result.json": json.dumps(
+                {"name": "Test", "uuid": "second", "historyId": "same", "status": "passed"}
+            ),
+            "three-result.json": json.dumps(
+                {"name": "No optional fields", "steps": [{"name": "Step"}]}
+            ),
+        },
+    )
+
+    tests = parse_archive(archive, max_uncompressed_bytes=100_000, max_result_files=10)
+
+    assert len(tests) == 3
+    assert [(item.uuid, item.history_id, item.status) for item in tests[:2]] == [
+        ("first", "same", "failed"), ("second", "same", "passed")
+    ]
+    assert tests[2].status is None
+    assert tests[2].uuid is None
+    assert tests[2].history_id is None
+    assert tests[2].labels == []
+    assert tests[2].parameters == []
+    assert tests[2].steps[0].status is None
+
+
+def test_masked_and_hidden_parameters_do_not_expose_values(tmp_path: Path) -> None:
+    result = {
+        "name": "Parameters",
+        "parameters": [
+            {"name": "visible", "value": "visible-value"},
+            {"name": "masked", "value": "private-1", "mode": "masked"},
+            {"name": "hidden", "value": "private-2", "mode": "hidden"},
+        ],
+    }
+    archive = write_archive(tmp_path / "results.zip", {"one-result.json": json.dumps(result)})
+
+    tests = parse_archive(archive, max_uncompressed_bytes=100_000, max_result_files=10)
+
+    assert tests[0].parameters == [
+        {"name": "visible", "value": "visible-value"},
+        {"name": "masked", "mode": "masked"},
+        {"name": "hidden", "mode": "hidden"},
+    ]
+
+
+def test_invalid_parameter_mode_is_rejected(tmp_path: Path) -> None:
+    result = {"name": "Test", "parameters": [{"name": "value", "mode": ["masked"]}]}
+    archive = write_archive(tmp_path / "results.zip", {"one-result.json": json.dumps(result)})
+
+    with pytest.raises(InvalidArchiveError):
+        parse_archive(archive, max_uncompressed_bytes=100_000, max_result_files=10)
+
+
 @pytest.mark.parametrize(
     "entries",
     [

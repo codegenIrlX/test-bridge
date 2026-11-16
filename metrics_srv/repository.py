@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from metrics_srv.config import Settings
 from metrics_srv.filelocks import remove_stale_upload
@@ -34,10 +35,31 @@ class Repository:
         with self.connect() as connection:
             connection.execute(schema)
 
-    def create_import(self, import_id: UUID) -> None:
+    def create_import(
+        self, import_id: UUID, *, project: str | None = None, job: str | None = None,
+        build_number: str | None = None, build_url: str | None = None,
+        revision: str | None = None, idempotency_key: str | None = None,
+        archive_sha256: str | None = None,
+    ) -> dict:
         """Зарегистрировать принятый архив."""
         with self.connect() as connection:
-            connection.execute("INSERT INTO imports (id) VALUES (%s)", (import_id,))
+            inserted = connection.execute(
+                "INSERT INTO imports (id, project, job, build_number, build_url, revision, "
+                "idempotency_key, archive_sha256) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
+                "ON CONFLICT (idempotency_key) DO NOTHING RETURNING id, status, error_message, "
+                "archive_deleted, archive_sha256, "
+                "project, job, build_number, build_url, revision",
+                (import_id, project, job, build_number, build_url, revision, idempotency_key,
+                 archive_sha256),
+            ).fetchone()
+            if inserted is not None:
+                return inserted
+            return connection.execute(
+                "SELECT id, status, error_message, archive_deleted, archive_sha256, "
+                "project, job, build_number, build_url, revision "
+                "FROM imports WHERE idempotency_key = %s",
+                (idempotency_key,),
+            ).fetchone()
 
     def get_import(self, import_id: UUID) -> dict | None:
         """Получить состояние импорта по идентификатору."""
@@ -88,12 +110,14 @@ class Repository:
                 return
             if row["attempt_count"] >= 3:
                 connection.execute(
-                    "UPDATE imports SET status = 'failed', error_message = %s WHERE id = %s",
+                    "UPDATE imports SET status = 'failed', error_message = %s, "
+                    "processing_finished_at = now() WHERE id = %s",
                     ("Исчерпаны попытки обработки импорта", import_id),
                 )
                 return
             connection.execute(
-                "UPDATE imports SET status = 'processing', attempt_count = attempt_count + 1 "
+                "UPDATE imports SET status = 'processing', attempt_count = attempt_count + 1, "
+                "processing_started_at = now(), processing_finished_at = NULL "
                 "WHERE id = %s", (import_id,)
             )
             connection.commit()
@@ -104,7 +128,8 @@ class Repository:
                 )
             except (InvalidArchiveError, FileNotFoundError):
                 connection.execute(
-                    "UPDATE imports SET status = 'failed', error_message = %s WHERE id = %s",
+                    "UPDATE imports SET status = 'failed', error_message = %s, "
+                    "processing_finished_at = now() WHERE id = %s",
                     ("Не удалось прочитать результаты Allure", import_id),
                 )
                 return
@@ -112,12 +137,16 @@ class Repository:
                 test_id = uuid4()
                 connection.execute(
                     "INSERT INTO test_results (id, import_id, position, name, started_at_ms, "
-                    "stopped_at_ms) VALUES (%s, %s, %s, %s, %s, %s)",
-                    (test_id, import_id, position, test.name, test.start, test.stop),
+                    "stopped_at_ms, status, allure_uuid, history_id, test_case_id, full_name, "
+                    "labels, parameters) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (test_id, import_id, position, test.name, test.start, test.stop, test.status,
+                     test.uuid, test.history_id, test.test_case_id, test.full_name,
+                     Jsonb(test.labels), Jsonb(test.parameters)),
                 )
                 self._insert_steps(connection, test_id, None, test.steps)
             connection.execute(
-                "UPDATE imports SET status = 'completed', error_message = NULL WHERE id = %s",
+                "UPDATE imports SET status = 'completed', error_message = NULL, "
+                "processing_finished_at = now() WHERE id = %s",
                 (import_id,),
             )
 
@@ -129,8 +158,8 @@ class Repository:
             step_id = uuid4()
             connection.execute(
                 "INSERT INTO test_steps (id, test_id, parent_id, position, name, started_at_ms, "
-                "stopped_at_ms) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (step_id, test_id, parent_id, position, step.name, step.start, step.stop),
+                "stopped_at_ms, status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                (step_id, test_id, parent_id, position, step.name, step.start, step.stop, step.status),
             )
             self._insert_steps(connection, test_id, step_id, step.steps)
 

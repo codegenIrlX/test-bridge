@@ -3,6 +3,8 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from psycopg import OperationalError
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from metrics_srv.api import create_app
 from metrics_srv.config import Settings
@@ -12,13 +14,20 @@ class FakeRepository:
     def __init__(self) -> None:
         self.rows: dict[UUID, dict] = {}
 
-    def create_import(self, import_id: UUID) -> None:
+    def create_import(self, import_id: UUID, **metadata: str | None) -> dict | None:
+        key = metadata.get("idempotency_key")
+        if key:
+            for row in self.rows.values():
+                if row.get("idempotency_key") == key:
+                    return row
         self.rows[import_id] = {
             "id": import_id,
             "status": "pending",
             "error_message": None,
             "archive_deleted": False,
+            **metadata,
         }
+        return self.rows[import_id] if metadata else None
 
     def get_import(self, import_id: UUID) -> dict | None:
         return self.rows.get(import_id)
@@ -79,6 +88,105 @@ def test_upload_and_fetch_status(client: TestClient, settings: Settings) -> None
         "errorMessage": None,
         "archiveDeleted": False,
     }
+
+
+def test_upload_metadata_and_idempotent_retry(settings: Settings) -> None:
+    repository = FakeRepository()
+    client = TestClient(create_app(settings, repository), raise_server_exceptions=False)
+    headers = {"Authorization": "Bearer fake-token", "Idempotency-Key": "build-42"}
+    data = {"project": "project-a", "job": "job-a", "buildNumber": "42",
+            "buildUrl": "https://ci.example/build/42", "revision": "abc123"}
+    files = {"file": ("results.zip", b"archive")}
+
+    first = client.post("/api/v1/imports", headers=headers, data=data, files=files)
+    second = client.post("/api/v1/imports", headers=headers, data=data, files=files)
+
+    assert first.status_code == second.status_code == 202
+    assert first.json()["importId"] == second.json()["importId"]
+    assert len(repository.rows) == 1
+    row = next(iter(repository.rows.values()))
+    assert (row["project"], row["job"], row["build_number"], row["build_url"], row["revision"]) == (
+        "project-a", "job-a", "42", "https://ci.example/build/42", "abc123"
+    )
+    assert len(list(settings.storage_path.glob("*.zip"))) == 1
+
+
+@pytest.mark.parametrize("changed", ["archive", "metadata"])
+def test_idempotency_key_conflicts_do_not_create_imports(
+    settings: Settings, changed: str
+) -> None:
+    repository = FakeRepository()
+    client = TestClient(create_app(settings, repository), raise_server_exceptions=False)
+    headers = {"Authorization": "Bearer fake-token", "Idempotency-Key": "build-42"}
+    first = client.post(
+        "/api/v1/imports", headers=headers, data={"project": "a"},
+        files={"file": ("results.zip", b"archive")},
+    )
+    second = client.post(
+        "/api/v1/imports", headers=headers,
+        data={"project": "b" if changed == "metadata" else "a"},
+        files={"file": ("results.zip", b"different" if changed == "archive" else b"archive")},
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 409
+    assert set(second.json()["error"]) == {"code", "message", "details"}
+    assert len(repository.rows) == 1
+    assert len(list(settings.storage_path.glob("*.zip"))) == 1
+
+
+def test_idempotent_retry_returns_current_import_state(settings: Settings) -> None:
+    repository = FakeRepository()
+    client = TestClient(create_app(settings, repository), raise_server_exceptions=False)
+    headers = {"Authorization": "Bearer fake-token", "Idempotency-Key": "build-42"}
+    files = {"file": ("results.zip", b"archive")}
+    first = client.post("/api/v1/imports", headers=headers, files=files)
+    assert first.status_code == 202
+    row = next(iter(repository.rows.values()))
+    row.update(status="failed", error_message="Не удалось прочитать результаты Allure",
+               archive_deleted=False)
+
+    second = client.post("/api/v1/imports", headers=headers, files=files)
+
+    assert second.status_code == 202
+    assert second.json() == {
+        "importId": first.json()["importId"],
+        "status": "failed",
+        "errorMessage": "Не удалось прочитать результаты Allure",
+        "archiveDeleted": False,
+    }
+
+
+def test_metrics_requires_bearer_token(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from metrics_srv import metrics
+
+    monkeypatch.setattr(metrics, "render_metrics", lambda repository, settings: "test_metric 1\n")
+
+    unauthorized = client.get("/metrics")
+    authorized = client.get("/metrics", headers={"Authorization": "Bearer fake-token"})
+
+    assert unauthorized.status_code == 401
+    assert unauthorized.json()["error"]["code"] == "unauthorized"
+    assert authorized.status_code == 200
+    assert authorized.text == "test_metric 1\n"
+
+
+@pytest.mark.parametrize("error", [OperationalError, RedisConnectionError])
+def test_metrics_source_failure_is_reported_without_private_details(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, error: type[Exception]
+) -> None:
+    from metrics_srv import metrics
+
+    def fail(repository: object, settings: object) -> str:
+        raise error("private connection detail")
+
+    monkeypatch.setattr(metrics, "render_metrics", fail)
+
+    response = client.get("/metrics", headers={"Authorization": "Bearer fake-token"})
+
+    assert response.status_code == 503
+    assert set(response.json()["error"]) == {"code", "message", "details"}
+    assert "private connection detail" not in response.text
 
 
 @pytest.mark.parametrize("authorization", [None, "Bearer wrong-token", "Basic Zm9vOmJhcg=="])
@@ -237,9 +345,20 @@ def test_swagger_schema_describes_upload_status_and_authorization(client: TestCl
     upload = schema["paths"]["/api/v1/imports"]["post"]
     status = schema["paths"]["/api/v1/imports/{import_id}"]["get"]
     retry = schema["paths"]["/api/v1/imports/{import_id}/retry"]["post"]
+    metrics = schema["paths"]["/metrics"]["get"]
     assert "multipart/form-data" in upload["requestBody"]["content"]
-    assert {"202", "401", "413", "422", "500"}.issubset(upload["responses"])
+    assert {"202", "401", "409", "413", "422", "500"}.issubset(upload["responses"])
+    assert any(
+        parameter["name"] == "Idempotency-Key" and parameter["in"] == "header"
+        for parameter in upload["parameters"]
+    )
+    ref = upload["requestBody"]["content"]["multipart/form-data"]["schema"]["$ref"]
+    properties = schema["components"]["schemas"][ref.rsplit("/", 1)[-1]]["properties"]
+    assert {"file", "project", "job", "buildNumber", "buildUrl", "revision"}.issubset(properties)
     assert {"200", "401", "404", "422", "500"}.issubset(status["responses"])
     assert {"202", "401", "404", "409", "422", "500"}.issubset(retry["responses"])
     assert upload["security"] and status["security"] and retry["security"]
+    assert metrics["security"]
+    assert {"200", "401", "503"}.issubset(metrics["responses"])
+    assert "text/plain" in metrics["responses"]["200"]["content"]
     assert client.get("/docs").status_code == 200
