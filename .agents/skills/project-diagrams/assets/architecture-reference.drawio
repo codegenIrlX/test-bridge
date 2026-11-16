@@ -1,0 +1,241 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="app.diagrams.net" type="device">
+  <diagram id="yuchatlib-architecture" name="Архитектура yuchatlib">
+    <mxGraphModel grid="1" gridSize="10" page="1" pageScale="1" pageWidth="1510" pageHeight="960" background="#ffffff">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Высокоуровневая архитектура yuchatlib" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=30;align=center;verticalAlign=middle;align=left;fontStyle=1;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="42" y="24" width="1410" height="39" as="geometry" />
+        </mxCell>
+        <mxCell id="band-entry" value="" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#eee9f6;strokeColor=#a4a4a4;fontSize=16;align=center;verticalAlign=middle;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="42" y="155" width="1426" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="band-name-entry" value="Интерфейсы" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=center;fontStyle=1;spacing=0;horizontal=0;" vertex="1" parent="1">
+          <mxGeometry x="1439" y="160" width="26" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="band-handling" value="" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#f0f0f0;strokeColor=#a4a4a4;fontSize=16;align=center;verticalAlign=middle;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="42" y="353" width="1426" height="204" as="geometry" />
+        </mxCell>
+        <mxCell id="band-name-handling" value="Обработка событий" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=center;fontStyle=1;spacing=0;horizontal=0;" vertex="1" parent="1">
+          <mxGeometry x="1439" y="358" width="26" height="194" as="geometry" />
+        </mxCell>
+        <mxCell id="band-state" value="" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#fcf8ef;strokeColor=#a4a4a4;fontSize=16;align=center;verticalAlign=middle;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="42" y="565" width="1426" height="211" as="geometry" />
+        </mxCell>
+        <mxCell id="band-name-state" value="Состояние и курсор" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=center;fontStyle=1;spacing=0;horizontal=0;" vertex="1" parent="1">
+          <mxGeometry x="1439" y="570" width="26" height="201" as="geometry" />
+        </mxCell>
+        <mxCell id="process-frame" value="" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;strokeWidth=1.3;" vertex="1" parent="1">
+          <mxGeometry x="63" y="125" width="1084" height="651" as="geometry" />
+        </mxCell>
+        <mxCell id="library-frame" value="" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;strokeWidth=1.3;" vertex="1" parent="1">
+          <mxGeometry x="388" y="165" width="513" height="611" as="geometry" />
+        </mxCell>
+        <mxCell id="process-title" value="Процесс приложения бота" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#ffffff;strokeColor=#222222;fontSize=17;align=center;verticalAlign=middle;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="63" y="125" width="1084" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="library-title" value="Библиотека yuchatlib" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#d9ead3;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="388" y="165" width="513" height="29" as="geometry" />
+        </mxCell>
+        <mxCell id="app-title" value="Код приложения" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#fbe6cf;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="132" y="165" width="184" height="29" as="geometry" />
+        </mxCell>
+        <mxCell id="sender" value="Отправитель webhook" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#d0e2f1;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;strokeWidth=1.5;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="86" y="68" width="230" height="39" as="geometry" />
+        </mxCell>
+        <mxCell id="route" value="POST-маршрут приложения" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#fbe6cf;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;strokeWidth=1.5;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="86" y="227" width="230" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="launcher" value="Запуск polling" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#fbe6cf;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;strokeWidth=1.5;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="86" y="300" width="230" height="43" as="geometry" />
+        </mxCell>
+        <mxCell id="handlers" value="Обработчики&#10;приложения" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#fbe6cf;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;strokeWidth=1.5;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="934" y="430" width="192" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="webhook" value="WebhookHandler&#10;Адаптер aiohttp" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#d9ead3;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;strokeWidth=1.5;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="426" y="221" width="190" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="bot" value="Bot&#10;Методы API и транспорт httpx" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#d9ead3;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;strokeWidth=1.5;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="643" y="221" width="236" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="dispatcher" value="Dispatcher&#10;Router, фильтры и middleware" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#d9ead3;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;strokeWidth=1.5;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="437" y="425" width="310" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="fsm" value="FSMContext&#10;MemoryStorage по умолчанию" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#d9ead3;strokeColor=#222222;fontSize=15;align=center;verticalAlign=middle;strokeWidth=1.5;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="650" y="632" width="229" height="68" as="geometry" />
+        </mxCell>
+        <mxCell id="cursor" value="Курсор polling&#10;По умолчанию в памяти" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#d9ead3;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;strokeWidth=1.5;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="417" y="632" width="221" height="68" as="geometry" />
+        </mxCell>
+        <mxCell id="api" value="YuChat API&#10;Публичный API v2" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#d0e2f1;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;strokeWidth=1.5;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="1224" y="221" width="190" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="database" value="Файл SQLite&#10;FSM и/или курсор polling" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#d0e2f1;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;strokeWidth=1.5;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="1224" y="645" width="190" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="receive-post" style="orthogonalLoop=1;rounded=0;html=0;strokeWidth=2;strokeColor=#af6000;endArrow=block;endFill=1;jettySize=auto;exitX=0.1;exitY=1;exitDx=0;exitDy=0;entryX=0.1;entryY=0;entryDx=0;entryDy=0;dashed=1;dashPattern=5 3;noEdgeStyle=1;" edge="1" parent="1" source="sender" target="route">
+          <mxGeometry relative="1" as="geometry">
+            </mxGeometry>
+        </mxCell>
+        <mxCell id="invoke-hook" style="orthogonalLoop=1;rounded=0;html=0;strokeWidth=2;strokeColor=#3c7430;endArrow=block;endFill=1;jettySize=auto;exitX=1;exitY=0.4814814815;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;dashed=1;dashPattern=5 3;noEdgeStyle=1;" edge="1" parent="1" source="route" target="webhook">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="feed-update" style="orthogonalLoop=1;rounded=0;html=0;strokeWidth=2;strokeColor=#222222;endArrow=block;endFill=1;jettySize=auto;exitX=0.4947368421;exitY=1;exitDx=0;exitDy=0;entryX=0.2677419355;entryY=0;entryDx=0;entryDy=0;dashed=1;dashPattern=5 3;noEdgeStyle=1;" edge="1" parent="1" source="webhook" target="dispatcher">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="start-polling" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;html=0;strokeWidth=2;strokeColor=#3c7430;endArrow=block;endFill=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.2976190476;entryDx=0;entryDy=0;" edge="1" parent="1" source="launcher" target="dispatcher">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="201" y="450" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="run-handler" style="orthogonalLoop=1;rounded=0;html=0;strokeWidth=2;strokeColor=#3c7430;endArrow=block;endFill=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;noEdgeStyle=1;" edge="1" parent="1" source="dispatcher" target="handlers">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="handler-bot" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;html=0;strokeWidth=2;strokeColor=#3c7430;endArrow=block;endFill=1;jettySize=auto;exitX=0.4947916667;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.671875;entryDx=0;entryDy=0;" edge="1" parent="1" source="handlers" target="bot">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1029" y="264" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="polling-bot" style="orthogonalLoop=1;rounded=0;html=0;strokeWidth=2;strokeColor=#222222;endArrow=block;endFill=1;jettySize=auto;exitX=0.8516129032;exitY=0;exitDx=0;exitDy=0;entryX=0.2457627119;entryY=1;entryDx=0;entryDy=0;noEdgeStyle=1;" edge="1" parent="1" source="dispatcher" target="bot">
+          <mxGeometry relative="1" as="geometry">
+            </mxGeometry>
+        </mxCell>
+        <mxCell id="outbound-api" style="orthogonalLoop=1;rounded=0;html=0;strokeWidth=2;strokeColor=#af6000;endArrow=block;endFill=1;jettySize=auto;exitX=1;exitY=0.234375;exitDx=0;exitDy=0;entryX=0;entryY=0.234375;entryDx=0;entryDy=0;noEdgeStyle=1;" edge="1" parent="1" source="bot" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="handler-state" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;html=0;strokeWidth=2;strokeColor=#3c7430;endArrow=block;endFill=1;jettySize=auto;exitX=0.4947916667;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.2647058824;entryDx=0;entryDy=0;" edge="1" parent="1" source="handlers" target="fsm">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1029" y="650" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="polling-cursor" style="orthogonalLoop=1;rounded=0;html=0;strokeWidth=2;strokeColor=#222222;endArrow=block;endFill=1;jettySize=auto;exitX=0.3032258065;exitY=1;exitDx=0;exitDy=0;entryX=0.5158371041;entryY=0;entryDx=0;entryDy=0;noEdgeStyle=1;" edge="1" parent="1" source="dispatcher" target="cursor">
+          <mxGeometry relative="1" as="geometry">
+            </mxGeometry>
+        </mxCell>
+        <mxCell id="store-state" style="orthogonalLoop=1;rounded=0;html=0;strokeWidth=2;strokeColor=#af6000;endArrow=block;endFill=1;jettySize=auto;exitX=1;exitY=0.8676470588;exitDx=0;exitDy=0;entryX=0;entryY=0.3833333333;entryDx=0;entryDy=0;dashed=1;dashPattern=5 3;noEdgeStyle=1;" edge="1" parent="1" source="fsm" target="database">
+          <mxGeometry relative="1" as="geometry">
+            </mxGeometry>
+        </mxCell>
+        <mxCell id="store-cursor" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;html=0;strokeWidth=2;strokeColor=#af6000;endArrow=block;endFill=1;jettySize=auto;exitX=0.5158371041;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.825;entryDx=0;entryDy=0;dashed=1;dashPattern=5 3;" edge="1" parent="1" source="cursor" target="database">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="531" y="744" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="post-text" value="POST с событием" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="121" y="197" width="150" height="23" as="geometry" />
+        </mxCell>
+        <mxCell id="handle-text" value="handle" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=center;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="332" y="227" width="52" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="feed-text" value="feed_update" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="530" y="299" width="118" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="start-text" value="start_polling" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="218" y="424" width="104" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="dispatch-text" value="Вызов обработчика" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=center;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="760" y="439" width="136" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="handler-bot-text" value="Методы Bot" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="1039" y="291" width="96" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="get-updates-text" value="get_updates" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="711" y="377" width="105" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="api-text" value="HTTP" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=center;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="1151" y="208" width="70" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="state-text" value="Состояние&#10;и данные FSM" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="911" y="605" width="111" height="41" as="geometry" />
+        </mxCell>
+        <mxCell id="cursor-text" value="Чтение и обновление offset" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="543" y="528" width="231" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="sqlite-state-text" value="SQLiteStorage" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="1048" y="668" width="97" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="sqlite-cursor-text" value="SQLiteCursorStorage" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=13;align=center;verticalAlign=middle;align=center;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="962" y="717" width="164" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-title" value="Легенда" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=17;align=center;verticalAlign=middle;align=left;fontStyle=1;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="63" y="797" width="260" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-fill-app" value="" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#fbe6cf;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="63" y="834" width="56" height="19" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-label-app" value="Код приложения" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="132" y="830" width="305" height="27" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-fill-sdk" value="" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#d9ead3;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="63" y="865" width="56" height="19" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-label-sdk" value="Компоненты yuchatlib" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="132" y="861" width="305" height="27" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-fill-external" value="" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=#d0e2f1;strokeColor=#222222;fontSize=16;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="63" y="896" width="56" height="19" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-label-external" value="Внешняя система или файл" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="132" y="892" width="305" height="27" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-line-external" value="Обращение за пределы процесса или входящий HTTP" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="556" y="829" width="720" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-line-internal" value="Обращение внутри библиотеки" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="556" y="858" width="720" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-line-integration" value="Связь кода приложения с библиотекой" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="556" y="887" width="720" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-line-optional" value="Пунктир обозначает опциональную связь" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=14;align=center;verticalAlign=middle;align=left;fontStyle=0;spacing=0;" vertex="1" parent="1">
+          <mxGeometry x="556" y="916" width="720" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-sample-external" value="" vertex="1" parent="1" style="shape=rectangle;direction=east;rounded=0;html=0;fillColor=#af6000;strokeColor=none;fontFamily=Arial;fontSize=14;">
+          <mxGeometry x="484" y="841" width="49" height="2" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-tip-external" value="" vertex="1" parent="1" style="shape=triangle;direction=east;rounded=0;html=0;fillColor=#af6000;strokeColor=none;fontFamily=Arial;fontSize=14;">
+          <mxGeometry x="532" y="837" width="10" height="10" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-sample-internal" value="" vertex="1" parent="1" style="shape=rectangle;direction=east;rounded=0;html=0;fillColor=#222222;strokeColor=none;fontFamily=Arial;fontSize=14;">
+          <mxGeometry x="484" y="870" width="49" height="2" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-tip-internal" value="" vertex="1" parent="1" style="shape=triangle;direction=east;rounded=0;html=0;fillColor=#222222;strokeColor=none;fontFamily=Arial;fontSize=14;">
+          <mxGeometry x="532" y="866" width="10" height="10" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-sample-integration" value="" vertex="1" parent="1" style="shape=rectangle;direction=east;rounded=0;html=0;fillColor=#3c7430;strokeColor=none;fontFamily=Arial;fontSize=14;">
+          <mxGeometry x="484" y="899" width="49" height="2" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-tip-integration" value="" vertex="1" parent="1" style="shape=triangle;direction=east;rounded=0;html=0;fillColor=#3c7430;strokeColor=none;fontFamily=Arial;fontSize=14;">
+          <mxGeometry x="532" y="895" width="10" height="10" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dash-1" value="" vertex="1" parent="1" style="shape=rectangle;direction=east;rounded=0;html=0;fillColor=#222222;strokeColor=none;fontFamily=Arial;fontSize=14;">
+          <mxGeometry x="484" y="928" width="6" height="2" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dash-2" value="" vertex="1" parent="1" style="shape=rectangle;direction=east;rounded=0;html=0;fillColor=#222222;strokeColor=none;fontFamily=Arial;fontSize=14;">
+          <mxGeometry x="494" y="928" width="6" height="2" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dash-3" value="" vertex="1" parent="1" style="shape=rectangle;direction=east;rounded=0;html=0;fillColor=#222222;strokeColor=none;fontFamily=Arial;fontSize=14;">
+          <mxGeometry x="504" y="928" width="6" height="2" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dash-4" value="" vertex="1" parent="1" style="shape=rectangle;direction=east;rounded=0;html=0;fillColor=#222222;strokeColor=none;fontFamily=Arial;fontSize=14;">
+          <mxGeometry x="514" y="928" width="6" height="2" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dash-5" value="" vertex="1" parent="1" style="shape=rectangle;direction=east;rounded=0;html=0;fillColor=#222222;strokeColor=none;fontFamily=Arial;fontSize=14;">
+          <mxGeometry x="524" y="928" width="6" height="2" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-tip-optional" value="" vertex="1" parent="1" style="shape=triangle;direction=east;rounded=0;html=0;fillColor=#222222;strokeColor=none;fontFamily=Arial;fontSize=14;">
+          <mxGeometry x="532" y="924" width="10" height="10" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

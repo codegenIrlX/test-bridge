@@ -1,0 +1,171 @@
+x-application: &application
+  build: .
+  environment:
+    METRICS_SRV_ENV: ${METRICS_SRV_ENV:-development}
+  volumes:
+    - ./config.yaml:/app/config.yaml:ro
+    - application-secret:/run/secrets:ro
+
+services:
+  tmpfs-keeper:
+    build: .
+    command: ["sleep", "infinity"]
+    volumes:
+      - application-secret:/run/secret-volume:ro
+      - postgres-bootstrap:/run/postgres-bootstrap:ro
+      - board-auth:/run/board-auth:ro
+    restart: unless-stopped
+
+  secret-bootstrap:
+    build: .
+    user: "0:0"
+    command: ["python", "deploy/bootstrap_secret.py"]
+    depends_on:
+      tmpfs-keeper:
+        condition: service_started
+    secrets:
+      - source: settings
+        target: source.yaml
+    volumes:
+      - application-secret:/run/secret-volume
+
+  postgres-bootstrap:
+    <<: *application
+    command: ["python", "deploy/init_postgres.py"]
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - application-secret:/run/secrets:ro
+      - postgres-bootstrap:/run/postgres-bootstrap
+    depends_on:
+      secret-bootstrap:
+        condition: service_completed_successfully
+
+  postgres:
+    image: postgres:17
+    ports:
+      - "127.0.0.1:5433:5432"
+    entrypoint: ["/bin/sh", "/opt/testbridge/postgres-entrypoint.sh"]
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - postgres-bootstrap:/run/postgres-bootstrap:ro
+      - ./deploy/postgres-entrypoint.sh:/opt/testbridge/postgres-entrypoint.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$(cat /run/postgres-bootstrap/user)\" -d \"$$(cat /run/postgres-bootstrap/database)\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  board-bootstrap:
+    <<: *application
+    command: ["python", "deploy/init_board.py"]
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - application-secret:/run/secrets:ro
+      - board-auth:/run/board-auth
+    depends_on:
+      secret-bootstrap:
+        condition: service_completed_successfully
+
+  bull-board:
+    image: ghcr.io/felixmosh/bull-board@sha256:3945a71616dd6478cca39c4a315febd0fa0b1838327060fcb93fd88d061181bf
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - 'set -eu; export BULL_BOARD_USER=admin; BULL_BOARD_PASSWORD="$$(cat /run/board/password)"; test -n "$$BULL_BOARD_PASSWORD"; export BULL_BOARD_PASSWORD; exec bull-board --redis redis://redis:6379 --read-only'
+    volumes:
+      - board-auth:/run/board:ro
+      - ./deploy/bull-board.config.cjs:/app/bull-board.config.cjs:ro
+      - ./deploy/test-bridge-mark.svg:/app/test-bridge-mark.svg:ro
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      board-bootstrap:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  migrate:
+    <<: *application
+    command: ["python", "-m", "metrics_srv", "migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *application
+    command: ["python", "-m", "metrics_srv", "api"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - application-secret:/run/secrets:ro
+      - import-data:/data/imports
+    depends_on: &application-dependencies
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  scheduler:
+    <<: *application
+    command: ["python", "-m", "metrics_srv", "scheduler"]
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - application-secret:/run/secrets:ro
+      - import-data:/data/imports
+    depends_on: *application-dependencies
+    restart: unless-stopped
+
+  processor:
+    <<: *application
+    command: ["python", "-m", "metrics_srv", "processor"]
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - application-secret:/run/secrets:ro
+      - import-data:/data/imports
+    depends_on: *application-dependencies
+    restart: unless-stopped
+
+secrets:
+  settings:
+    file: ./secrets.yaml
+
+volumes:
+  postgres-data:
+  redis-data:
+  import-data:
+  board-auth:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=1777
+  application-secret:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=0755
+  postgres-bootstrap:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=1777

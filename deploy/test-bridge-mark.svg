@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72" role="img" aria-labelledby="title">
+  <title id="title">Test Bridge</title>
+  <g transform="translate(2.88 2.88) scale(.92)" fill="none" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="#242045" d="M36 7 11 21.5v29l9 5.25 24-14"/>
+    <path stroke="#5945CC" d="M36 65l25-14.5v-29l-9-5.25-24 14"/>
+  </g>
+</svg>

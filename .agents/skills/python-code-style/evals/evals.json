@@ -1,0 +1,363 @@
+{
+  "schemaVersion": 1,
+  "skill": "python-code-style",
+  "execution": "Каждый сценарий выполняется в отдельном временном каталоге. files — исходные файлы; prompt — запрос исполнителю. Передай исполнителю SKILL.md и references, но не assertions и не этот eval-файл. Проверяющий оценивает артефакты и реальные результаты команд по assertions. Запись в целевой проект, установка зависимостей и внешние действия не разрешены. Отчёт и артефакты прогона остаются вне целевого проекта.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "small-project",
+      "prompt": "В проекте один сценарий расчёта стоимости доставки, без HTTP API и БД. Добавь delivery_fee(weight_kg): при весе до 5 кг включительно цена 300, свыше 5 кг — 500; нулевой или отрицательный вес вызывает ValueError. Выбери соразмерную структуру, добавь локальные тесты и выполни их. Других возможностей пока не требуется.",
+      "files": {
+        "README.md": "# Доставка\nPython 3.12, только стандартная библиотека. Один сценарий, нет API и хранилища.\n",
+        "pyproject.toml": "[project]\nname = \"delivery-eval\"\nversion = \"0.0.0\"\nrequires-python = \">=3.12\"\n"
+      },
+      "assertions": [
+        {
+          "id": "1.1",
+          "text": "Есть работающая функция delivery_fee и проверки границы 5 кг, большего веса и недопустимых значений."
+        },
+        {
+          "id": "1.2",
+          "text": "Нет пустых слоёв, микросервисов, ORM и зависимостей; структура состоит из нескольких нужных модулей и тестов."
+        },
+        {
+          "id": "1.3",
+          "text": "Локальные тесты действительно запущены; ошибки или ограничения отражены, а не заменены утверждением об успехе."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "growing-domains",
+      "prompt": "Развиваем два самостоятельных сценария: оформление заказа и выставление счёта. Добавь скидку заказа: при сумме от 1000 скидка 10%; количество должно быть положительным, цена — неотрицательной. Для счёта добавь НДС 20% с округлением до двух знаков. Разложи бизнес-логику по доменам соразмерно проекту. Импорты app.orders.order_total и app.invoices.invoice_total уже используются потребителями, сохрани их и прежние вызовы. Новые параметры сделай совместимыми. API и БД не нужны. Добавь и выполни тесты.",
+      "files": {
+        "README.md": "# Заказы и счета\nPython 3.12. Отдельные домены orders и invoices. Пока плоские модули, появились независимые правила. Нет фреймворков и БД.\n",
+        "app/orders.py": "def order_total(price: float, quantity: int) -> float:\n    return price * quantity\n",
+        "app/invoices.py": "def invoice_total(amount: float) -> float:\n    return amount\n",
+        "test_compat.py": "import unittest\nfrom app.orders import order_total\nfrom app.invoices import invoice_total\n\nclass CompatTest(unittest.TestCase):\n    def test_existing_calls(self):\n        self.assertEqual(order_total(100, 2), 200)\n        self.assertEqual(invoice_total(100), 100)\n"
+      },
+      "assertions": [
+        {
+          "id": "2.1",
+          "text": "Новая логика сгруппирована по доменам orders и invoices, без смешения самостоятельных правил в общем services."
+        },
+        {
+          "id": "2.2",
+          "text": "Прежние import paths и вызовы сохранены; изменение НДС доступно через совместимое расширение интерфейса."
+        },
+        {
+          "id": "2.3",
+          "text": "Проверены скидка на границе 1000, ошибки входа и НДС/округление; тесты проходят."
+        },
+        {
+          "id": "2.4",
+          "text": "Нет пустых пакетов слоёв и speculative repositories/interfaces/ORM."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "large-src-layout",
+      "prompt": "В крупном проекте portal много сценариев складского домена. Отдели самостоятельную ответственность резервирования от расчёта свободного остатка внутри inventory; добавь release_stock(reserved, quantity), запрещающий отрицательное количество и освобождение сверх резерва. Выбери пакеты внутри домена по ответственности. Сохрани существующий src-layout, публичные импорты и соседний billing. Не создавай остальные пакеты из архитектурного примера без содержимого. Добавь и выполни тесты.",
+      "files": {
+        "README.md": "# Portal\nКрупный проект: независимые домены inventory и billing. Python 3.12, src-layout обязателен. Нет БД. Проверки: PYTHONPATH=src python -m unittest discover (переменную задать способом текущей оболочки).\n",
+        "src/portal/domains/inventory/services.py": "def available_stock(total: int, reserved: int) -> int:\n    return total - reserved\n\ndef reserve_stock(available: int, quantity: int) -> int:\n    if quantity <= 0 or quantity > available:\n        raise ValueError('invalid quantity')\n    return quantity\n",
+        "src/portal/domains/billing/services.py": "def outstanding(amount: int, paid: int) -> int:\n    return amount - paid\n",
+        "test_compat.py": "import unittest\nfrom portal.domains.inventory.services import available_stock, reserve_stock\nfrom portal.domains.billing.services import outstanding\n\nclass CompatTest(unittest.TestCase):\n    def test_contracts(self):\n        self.assertEqual(available_stock(10, 3), 7)\n        self.assertEqual(reserve_stock(7, 2), 2)\n        self.assertEqual(outstanding(10, 4), 6)\n"
+      },
+      "assertions": [
+        {
+          "id": "3.1",
+          "text": "src/portal сохранён; складская логика остаётся у inventory, самостоятельные ответственности выделены в содержательные модули и пакеты внутри домена без требования единственного имени пакета."
+        },
+        {
+          "id": "3.2",
+          "text": "Публичные импорты и поведение existing функций сохранены, billing не изменён без причины."
+        },
+        {
+          "id": "3.3",
+          "text": "release_stock проверен на успехе, отрицательном количестве и освобождении сверх резерва."
+        },
+        {
+          "id": "3.4",
+          "text": "Не созданы пустые core/db/models/repositories/mappers, фиктивные домены или Alembic."
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "dto-purposes-and-files",
+      "prompt": "Для домена resources подготовь Pydantic-контракты: создание ресурса (name и group_id) и ответ с resource_id; чтение ресурса с вложенной группой (group_id и name); список ресурсов с элементами и total; bulk-отзыв подписок пользователей (user_ids и revoked_count). Нужны также базовый DTO с request_id и generic-контейнер ответа с data для чтения. Размести классы и назови по правилам скилла, сохрани владельца. Все DTO, включая вложенные, базовый и generic, определяй в собственных файлах. Используй уже установленную версию Pydantic; FastAPI здесь не нужен. Проверь импорты и валидацию примерами или локальными тестами.",
+      "files": {
+        "README.md": "# Контракты resources\nPython 3.12. Pydantic доступен в runtime, версию сначала проверь. Приложение и HTTP-роуты создавать не требуется.\n",
+        "domains/resources/__init__.py": ""
+      },
+      "assertions": [
+        {
+          "id": "4.1",
+          "text": "Контракты у resources в dto/<назначение>; create/read/list/bulk разделены, доменного dto.py и DTO-файлов в корне dto нет."
+        },
+        {
+          "id": "4.2",
+          "text": "Каждый DTO-класс имеет отдельный snake_case-файл, включая вложенную группу, базовую модель и generic-контейнер."
+        },
+        {
+          "id": "4.3",
+          "text": "Имена PascalCase с Dto и ролью RequestDto/ResponseDto/ListResponseDto/ListItemResponseDto; bulk-имена отражают действие и область."
+        },
+        {
+          "id": "4.4",
+          "text": "Импорты работают, вложенные модели и generic-контейнер проверены с установленной Pydantic, отсутствует принудительная установка зависимостей."
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "domain-contract-ownership",
+      "prompt": "Другому домену reports нужен опубликованный контракт чтения каталога. Реализуй report_titles(resources), который принимает список ResourceResponseDto владельца catalog и возвращает названия. Обеспечь переиспользование контракта без циклических импортов; добавь и выполни тест. Домен resources или shared/dto создавать не требуется.",
+      "files": {
+        "README.md": "# Каталог и отчёты\nPython 3.12, Pydantic доступен. Catalog владеет контрактом; reports — потребитель.\n",
+        "domains/catalog/dto/read/resource_response.py": "from pydantic import BaseModel\n\nclass ResourceResponseDto(BaseModel):\n    \"\"\"Ресурс каталога.\"\"\"\n    resource_id: int\n    title: str\n",
+        "domains/reports/services.py": "\"\"\"Подготовка отчётов.\"\"\"\n"
+      },
+      "assertions": [
+        {
+          "id": "5.1",
+          "text": "reports импортирует существующий ResourceResponseDto владельца catalog, без копии класса и без переноса в shared/dto."
+        },
+        {
+          "id": "5.2",
+          "text": "Владелец не начинает импортировать потребителя; импорты обоих доменов работают без цикла."
+        },
+        {
+          "id": "5.3",
+          "text": "report_titles возвращает названия, включая пустой список, что подтверждено локальной проверкой."
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "fastapi-camelcase",
+      "prompt": "Создай минимальный FastAPI-пример для проверки нового JSON-контракта resources: POST /resources принимает resourceName и groupId; обычный GET /resources/1 возвращает resourceId и вложенный group с groupId; GET /resources/1/raw возвращает тот же контракт прямым JSONResponse. Python-поля должны оставаться snake_case, DTO — по правилам скилла. Проверь версии, входной JSON, фактические обычный/прямой ответы и OpenAPI. Не устанавливай зависимости: если FastAPI или HTTP test client недоступны, сохрани реализованный пример и выполни доступные проверки Pydantic, явно отметив непроверенную HTTP-часть.",
+      "files": {
+        "README.md": "# Новый API\nPython 3.12. Pydantic доступен; наличие FastAPI и HTTP-клиента не гарантируется, сначала проверь runtime. Нет БД и внешних сервисов. Разрешён только локальный пример в текущем временном каталоге.\n"
+      },
+      "assertions": [
+        {
+          "id": "6.1",
+          "text": "DTO у владельца resources, назначения и отдельные файлы соблюдены; Python-поля snake_case, внешний JSON camelCase, включая вложенный group."
+        },
+        {
+          "id": "6.2",
+          "text": "Aliases входа и сериализации настроены с учётом версии; raw JSONResponse получает JSON-совместимый payload с aliases."
+        },
+        {
+          "id": "6.3",
+          "text": "Обычный ответ и raw-ответ документированы согласованно; OpenAPI сверяется с фактическим JSON при наличии runtime."
+        },
+        {
+          "id": "6.4",
+          "text": "В отчёте различаются выполненные Pydantic-проверки и HTTP/OpenAPI runtime; недостающие зависимости не устанавливались, ограничения не скрыты."
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "contract-compatibility",
+      "prompt": "Опубликованный внешний ответ legacy_payload менять нельзя: клиенты ожидают snake_case, OAuth-поля, enum-значения и ключи пользовательского словаря как сейчас. В этом же проекте планируется новый FastAPI endpoint. Добавь только Pydantic DTO для нового ответа с resourceId, statusCode (значения draft_state/ready_state) и labels (произвольные ключи). Старую функцию не меняй. DTO размести у владельца assets. Проверь существующий ответ и сериализацию нового контракта, не устанавливая зависимости.",
+      "files": {
+        "README.md": "# Совместимость\nPython 3.12, Pydantic установлен. legacy_payload — опубликованный контракт. HTTP-обработчик пока не нужен.\n",
+        "legacy.py": "def legacy_payload() -> dict:\n    return {'resource_id': 1, 'access_token': 'example-token', 'token_type': 'bearer', 'status_code': 'draft_state', 'labels': {'customer_key': 'custom_value'}}\n"
+      },
+      "assertions": [
+        {
+          "id": "7.1",
+          "text": "legacy_payload сохраняет точный опубликованный JSON, включая OAuth names, enum strings и динамические ключи."
+        },
+        {
+          "id": "7.2",
+          "text": "Новый DTO у assets имеет именные JSON-поля resourceId/statusCode/labels и Python-поля resource_id/status_code/labels."
+        },
+        {
+          "id": "7.3",
+          "text": "Значения draft_state/ready_state и пользовательские ключи labels не преобразуются в camelCase."
+        },
+        {
+          "id": "7.4",
+          "text": "Старый и новый контракты реально проверены без массового переименования и без новых зависимостей."
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "refactor-short-circuit",
+      "prompt": "Отрефактори can_access для читаемости, сохранив поведение и публичную сигнатуру. В этой функции по нашему прямому требованию оставь if/else, а не заменяй на early return. Не вызывай дорогую или побочную проверку раньше необходимого. Соблюдай текущую конфигурацию форматирования, не меняй инструменты и зависимости. Добавь проверки результатов и порядка вызовов и выполни их.",
+      "files": {
+        "README.md": "# Проверка доступа\nPython 3.12, стандартная библиотека. Функция вызывается существующими потребителями, expensive_check может иметь побочные эффекты.\n",
+        "pyproject.toml": "[tool.ruff]\nline-length = 100\n",
+        "access.py": "def can_access(is_admin, is_owner, enabled, expensive_check):\n    if is_admin or is_owner or (enabled and expensive_check()):\n        return True\n    else:\n        return False\n"
+      },
+      "assertions": [
+        {
+          "id": "8.1",
+          "text": "Сигнатура и результаты сохранены; expensive_check не вызывается для admin/owner или enabled=False."
+        },
+        {
+          "id": "8.2",
+          "text": "В оставшемся случае expensive_check вызывается один раз, его ошибка не подавляется."
+        },
+        {
+          "id": "8.3",
+          "text": "Прямое требование if/else соблюдено; конфигурация line-length=100 не заменена стилевым предпочтением."
+        },
+        {
+          "id": "8.4",
+          "text": "Локальные проверки реально охватывают short-circuit и порядок/число вызовов; зависимости не добавлены."
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "dto-docstrings-field-descriptions",
+      "prompt": "Для домена regions подготовь Pydantic DTO для API: запрос создания региона, ответ с вложенной страной, элемент списка и страницу регионов. Общий базовый DTO содержит идентификатор операции, ответ наследует базовый. Дополнительно нужен generic-контейнер результата и технический DTO пагинации. Исходные данные и ограничения находятся в README. Используй инструкции проекта и скилл python-code-style; проверь импорты, данные и JSON Schema локально. FastAPI и внешние сервисы не нужны, зависимости не устанавливай.",
+      "files": {
+        "README.md": "# Контракты регионов\nPython 3.12 и установленный Pydantic 2. API-контракты принадлежат домену regions.\n\n- Идентификатор операции — непустая строка.\n- Запрос создания: название региона — непустая строка длиной не более 120, код страны — строка из двух символов.\n- Страна: код из двух символов и непустое название.\n- Ответ: идентификатор операции, положительный идентификатор региона, название региона, страна.\n- Элемент списка: положительный идентификатор и название региона.\n- Страница: элементы списка и общее неотрицательное количество.\n- Техническая пагинация: номер страницы от 1 и размер от 1 до 100 с умолчанием 20.\n- Generic-контейнер: данные результата и техническая пагинация.\n\nСохраняй ограничения валидации и значения по умолчанию. Доступ к HTTP и БД не требуется.\n"
+      },
+      "assertions": [
+        {
+          "id": "9.1",
+          "text": "Для request/response, вложенной страны, элемента списка, страницы, базового, наследующего, generic и технического DTO каждый класс объявляет собственный непустой краткий docstring на русском; описание наследника не берётся из родителя."
+        },
+        {
+          "id": "9.2",
+          "text": "Каждое объявленное поле Pydantic DTO использует Field(description=...) с непустым понятным описанием; унаследованные поля сохраняют описание базового объявления без принудительного дублирования."
+        },
+        {
+          "id": "9.3",
+          "text": "Назначение каждого DTO и полей соответствует исходным данным, без неподтверждённых гарантий и пересказа структуры вместо смысла."
+        },
+        {
+          "id": "9.4",
+          "text": "Сохранены все заданные ограничения, обязательность и умолчание размера страницы; ошибки валидации и default проверены реальными Pydantic-тестами."
+        },
+        {
+          "id": "9.5",
+          "text": "У проверенных моделей Pydantic model_json_schema содержит описания полей, включая унаследованные; generic специализация и вложенные поля проверены runtime."
+        },
+        {
+          "id": "9.6",
+          "text": "Каждый DTO-класс в собственном файле у владельца regions по назначению; новые зависимости не устанавливались."
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "client-resource-ownership",
+      "prompt": "У UsersClient ошибка владения ресурсом: закрытие клиента закрывает transport, переданный вызывающим кодом. Сохрани UsersClient(transport) как заимствующий вызов и read_user(user_id). Добавь UsersClient.from_factory(factory): этот путь создаёт собственный transport и отвечает за его освобождение. Поддержи with UsersClient(...) и with UsersClient.from_factory(...), включая ошибку в теле блока; close допускает повторный вызов. Сохранить реальные запросы здесь не требуется: исходный transport — локальная заглушка. Добавь и выполни проверки владения, вызовов и освобождения без новых зависимостей.",
+      "files": {
+        "README.md": "# Клиент пользователей\nPython 3.12, только стандартная библиотека. Transport.request(method, path) возвращает строку; ошибка request должна доходить до вызывающего кода. UsersClient.read_user(7) выполняет GET /users/7. Переданный transport может использоваться несколькими клиентами, его закрывает вызывающий код. Factory возвращает новый transport; только этот ресурс принадлежит созданному клиенту. Повторный close не должен повторно закрывать собственный transport. Сетевые вызовы не разрешены.\n",
+        "client.py": "class UsersClient:\n    def __init__(self, transport):\n        self._transport = transport\n\n    def read_user(self, user_id):\n        return self._transport.request('GET', f'/users/{user_id}')\n\n    def close(self):\n        self._transport.close()\n",
+        "transport_stub.py": "class RecordingTransport:\n    def __init__(self, failure=None):\n        self.calls = []\n        self.close_count = 0\n        self.failure = failure\n\n    def request(self, method, path):\n        if self.close_count:\n            raise RuntimeError('transport closed')\n        self.calls.append((method, path))\n        if self.failure is not None:\n            raise self.failure\n        return 'user-response'\n\n    def close(self):\n        self.close_count += 1\n"
+      },
+      "assertions": [
+        {
+          "id": "10.1",
+          "text": "UsersClient(transport) и read_user сохраняют вызов GET /users/{id} и результат; после close или выхода из with заимствованный transport остаётся доступен другому клиенту."
+        },
+        {
+          "id": "10.2",
+          "text": "from_factory вызывает factory один раз; созданный transport закрывается ровно один раз после успеха, ошибки в блоке и повторного close."
+        },
+        {
+          "id": "10.3",
+          "text": "Ошибка операции и ошибка factory не превращаются в успешный результат; клиент не получает владение чужим ресурсом и не использует глобальное состояние или финализацию GC для cleanup."
+        },
+        {
+          "id": "10.4",
+          "text": "Локальные проверки действительно выполняются с заглушкой и проверяют наблюдаемые вызовы и закрытие; результат не назван реальной HTTP-проверкой, зависимости не добавлены."
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "substitution-and-independent-adapter",
+      "prompt": "Приведи StrictSource к опубликованному контракту RecordSource.read и типизируй границу read_title(source, key). read_title должен принимать как существующие источники, так и независимый объект с методом read; заставлять внешние адаптеры наследоваться от нашего класса нельзя. Сохрани импорты и сигнатуры существующих операций. Проверь общими сценариями две реализации из sources.py и независимый fake, включая отсутствующий ключ и ошибку источника. Никаких сетевых вызовов и новых зависимостей.",
+      "files": {
+        "README.md": "# Источники заголовков\nPython 3.12, стандартная библиотека. Контракт read(key: str) -> str | None: для непустого ключа вернуть заголовок или None, если запись отсутствует; пустой ключ вызывает ValueError. Внешняя техническая ошибка не означает отсутствие записи и должна сохраняться. read_title(source, key) возвращает заголовок, а для None — строку без названия. Независимые адаптеры предоставляют метод read без общего предка. Статическая проверка выполняется только имеющимся type checker, установка не разрешена.\n",
+        "sources.py": "class RecordSource:\n    def __init__(self, records: dict[str, str]) -> None:\n        self._records = dict(records)\n\n    def read(self, key: str) -> str | None:\n        if not key:\n            raise ValueError('empty key')\n        return self._records.get(key)\n\nclass StrictSource(RecordSource):\n    def read(self, key: str) -> str:\n        result = super().read(key)\n        if result is None:\n            raise LookupError(key)\n        return result\n\ndef read_title(source, key):\n    title = source.read(key)\n    return 'без названия' if title is None else title\n"
+      },
+      "assertions": [
+        {
+          "id": "11.1",
+          "text": "Обе существующие реализации соблюдают контракт успеха, None для отсутствия и ValueError для пустого ключа; StrictSource не усиливает предусловия и не меняет отсутствие записи на LookupError."
+        },
+        {
+          "id": "11.2",
+          "text": "Типизированная граница read_title допускает независимый fake без наследования от RecordSource; не вводится обязательный isinstance по конкретному классу и не используется Any как замена моделированию границы."
+        },
+        {
+          "id": "11.3",
+          "text": "read_title различает None и пустой строковый заголовок, а техническую ошибку источника не маскирует значением по умолчанию."
+        },
+        {
+          "id": "11.4",
+          "text": "Общие runtime-сценарии действительно проверены на двух источниках и независимом fake; наличие аннотации или runtime_checkable не представлено доказательством контракта. Выполнение type checker и его недоступность сообщаются отдельно."
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "immutable-value-and-safe-repr",
+      "prompt": "RunOptions должен быть устойчивым снимком настроек и ключом словаря, но после его создания изменение исходного labels меняет объект, hash не работает, а repr раскрывает token. Исправь модель, сохранив RunOptions(endpoint, labels, token), в том числе передачу labels списком. Требования равенства и представления находятся в README. Добавь и выполни проверки независимости от входной коллекции, равенства/hash и безопасного repr. Не вводи Pydantic, DTO-слои или новые зависимости.",
+      "files": {
+        "README.md": "# Снимок параметров запуска\nPython 3.12, стандартная библиотека. RunOptions — внутренний value object, не API DTO. labels — упорядоченная последовательность строк; после создания содержимое снимка нельзя менять через публичные поля. Равенство учитывает endpoint, labels и token, порядок labels значим. Равные экземпляры должны работать как один ключ dict. token не должен появляться в repr; это не требование сериализации, её пока нет. Все токены в проверках — искусственные маркеры.\n",
+        "options.py": "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass RunOptions:\n    endpoint: str\n    labels: list[str]\n    token: str\n"
+      },
+      "assertions": [
+        {
+          "id": "12.1",
+          "text": "Прежний конструктор принимает список; дальнейшая мутация исходного списка не меняет labels объекта, публичное содержимое снимка неизменяемо. frozen=True не назван достаточным для замораживания вложенного списка."
+        },
+        {
+          "id": "12.2",
+          "text": "Равные объекты имеют одинаковый hash и взаимозаменяемы как ключи dict; различие endpoint, token или порядка labels отражается в равенстве согласно требованиям."
+        },
+        {
+          "id": "12.3",
+          "text": "Искусственный token отсутствует в repr, при этом равенство не ослаблено исключением token из сравнения; защита repr не выдана за проверку несуществующей сериализации или логов."
+        },
+        {
+          "id": "12.4",
+          "text": "Проверки выполнены на реальных экземплярах; не добавлены DTO, зависимость для валидации, метакласс или unsafe_hash как обход проблемы с изменяемым состоянием."
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "instance-isolation-without-extra-hierarchy",
+      "prompt": "Два независимых запуска используют RunLog, но события смешиваются, а изменение списка, возвращённого snapshot(), повреждает журнал. Исправь эти ошибки, сохранив RunLog(), add(event), snapshot() -> list[str] и функцию format_status. format_status не имеет собственного состояния; менять её архитектуру не требуется. Добавь и выполни тесты независимости журналов и снимков. Не добавляй зависимости и не перестраивай проект целиком.",
+      "files": {
+        "README.md": "# Журнал локального запуска\nPython 3.12, стандартная библиотека. Каждый RunLog принадлежит отдельному запуску. add добавляет строковое событие в конец, snapshot возвращает независимый список в том же порядке. Прямое изменение внутреннего хранилища не является публичным API. format_status(True) возвращает passed, format_status(False) — failed. Здесь нет HTTP-сервера, БД или DI-контейнера.\n",
+        "run_log.py": "class RunLog:\n    _events = []\n\n    def add(self, event: str) -> None:\n        self._events.append(event)\n\n    def snapshot(self) -> list[str]:\n        return self._events\n\ndef format_status(passed: bool) -> str:\n    return 'passed' if passed else 'failed'\n"
+      },
+      "assertions": [
+        {
+          "id": "13.1",
+          "text": "Записи и порядок одного экземпляра не влияют на другой; вновь созданный журнал пуст независимо от ранее созданных объектов."
+        },
+        {
+          "id": "13.2",
+          "text": "Изменение результата snapshot не меняет внутренний журнал; последующие add не меняют ранее возвращённый снимок, тип результата остаётся list[str]."
+        },
+        {
+          "id": "13.3",
+          "text": "format_status остаётся совместимой функцией; не создаются иерархия BaseLog, Protocol, factory, backend-слои или контейнер без дополнительной ответственности."
+        },
+        {
+          "id": "13.4",
+          "text": "Реально выполнены проверки последовательного и чередующегося использования нескольких экземпляров и мутации снимков; нет общей очистки class attribute, маскирующей проблему изоляции."
+        }
+      ]
+    }
+  ]
+}

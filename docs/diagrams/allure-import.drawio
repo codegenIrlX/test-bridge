@@ -1,0 +1,119 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="allure-import" name="Импорт Allure">
+    <mxGraphModel dx="1414" dy="743" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="960" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=rectangle;rounded=0;fillColor=none;strokeColor=none;fontSize=28;align=left;verticalAlign=middle;fontStyle=1;" value="TestBridge: целевая архитектура импорта Allure" vertex="1">
+          <mxGeometry height="45" width="1400" x="40" y="24" as="geometry" />
+        </mxCell>
+        <mxCell id="entry-band" parent="1" style="html=0;shape=rectangle;rounded=0;fillColor=#eee9f6;strokeColor=#a4a4a4;dashed=1;" value="" vertex="1">
+          <mxGeometry height="190" width="1420" x="40" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="work-band" parent="1" style="html=0;shape=rectangle;rounded=0;fillColor=#f0f0f0;strokeColor=#a4a4a4;dashed=1;" value="" vertex="1">
+          <mxGeometry height="210" width="1420" x="40" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="state-band" parent="1" style="html=0;shape=rectangle;rounded=0;fillColor=#fcf8ef;strokeColor=#a4a4a4;dashed=1;" value="" vertex="1">
+          <mxGeometry height="190" width="1420" x="40" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="entry-label" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;shape=rectangle;fillColor=none;strokeColor=none;fontSize=14;fontStyle=1;horizontal=0;" value="Приём" vertex="1">
+          <mxGeometry height="180" width="25" x="1425" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="work-label" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;shape=rectangle;fillColor=none;strokeColor=none;fontSize=14;fontStyle=1;horizontal=0;" value="Обработка" vertex="1">
+          <mxGeometry height="200" width="25" x="1425" y="315" as="geometry" />
+        </mxCell>
+        <mxCell id="state-label" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;shape=rectangle;fillColor=none;strokeColor=none;fontSize=14;fontStyle=1;horizontal=0;" value="Хранение" vertex="1">
+          <mxGeometry height="180" width="25" x="1425" y="535" as="geometry" />
+        </mxCell>
+        <mxCell id="jenkins" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;rounded=0;fillColor=#ffffff;strokeColor=#555555;fontSize=18;" value="Jenkins" vertex="1">
+          <mxGeometry height="80" width="200" x="100" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="api" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;rounded=0;fillColor=#ffffff;strokeColor=#555555;fontSize=18;" value="API&#xa;FastAPI · Swagger" vertex="1">
+          <mxGeometry height="80" width="220" x="490" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="scheduler" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;rounded=0;fillColor=#ffffff;strokeColor=#555555;fontSize=18;" value="Scheduler" vertex="1">
+          <mxGeometry height="80" width="200" x="200" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="queue" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;rounded=0;fillColor=#ffffff;strokeColor=#555555;fontSize=18;" value="BullMQ&#xa;Redis" vertex="1">
+          <mxGeometry height="80" width="200" x="560" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="processor" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;rounded=0;fillColor=#ffffff;strokeColor=#555555;fontSize=18;" value="Processor" vertex="1">
+          <mxGeometry height="80" width="200" x="950" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="database" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=cylinder3;boundedLbl=1;backgroundOutline=1;size=12;fillColor=#ffffff;strokeColor=#555555;fontSize=17;" value="PostgreSQL&#xa;импорты, тесты, шаги" vertex="1">
+          <mxGeometry height="90" width="240" x="440" y="585" as="geometry" />
+        </mxCell>
+        <mxCell id="disk" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;whiteSpace=wrap;shape=cylinder3;boundedLbl=1;backgroundOutline=1;size=12;fillColor=#ffffff;strokeColor=#555555;fontSize=17;" value="Общий диск&#xa;архивы ZIP" vertex="1">
+          <mxGeometry height="90" width="220" x="970" y="585" as="geometry" />
+        </mxCell>
+        <mxCell id="jenkins-api" edge="1" parent="1" source="jenkins" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;fontFamily=Arial;fontColor=#222222;fontSize=14;strokeColor=#555555;endArrow=block;endFill=1;" target="api" value="ZIP по HTTP">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="api-db" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;fontFamily=Arial;fontColor=#222222;fontSize=14;strokeColor=#555555;endArrow=block;endFill=1;exitX=0.2;exitY=1;entryX=0.2;entryY=0;" value="задание и статус">
+          <mxGeometry relative="1" x="0.5141" y="3" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="553" y="240" as="sourcePoint" />
+            <mxPoint x="507" y="585" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="api-disk" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;fontFamily=Arial;fontColor=#222222;fontSize=14;strokeColor=#555555;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0.997;entryY=0.383;entryDx=0;entryDy=0;entryPerimeter=0;" target="disk" value="архив">
+          <mxGeometry relative="1" x="-0.4906" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1270" y="200" />
+              <mxPoint x="1270" y="619.5" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="scheduler-db" edge="1" parent="1" source="scheduler" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;fontFamily=Arial;fontColor=#222222;fontSize=14;strokeColor=#555555;endArrow=block;endFill=1;" target="database" value="читает задания">
+          <mxGeometry relative="1" x="0.5333" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="300" y="610" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="scheduler-queue" edge="1" parent="1" source="scheduler" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;fontFamily=Arial;fontColor=#222222;fontSize=14;strokeColor=#555555;endArrow=block;endFill=1;" target="queue" value="ставит задачу">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="processor-queue" edge="1" parent="1" source="processor" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;fontFamily=Arial;fontColor=#222222;fontSize=14;strokeColor=#555555;endArrow=block;endFill=1;" target="queue" value="получает задачу">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="processor-db" edge="1" parent="1" source="processor" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;fontFamily=Arial;fontColor=#222222;fontSize=14;strokeColor=#555555;endArrow=block;endFill=1;" target="database" value="сохраняет результаты">
+          <mxGeometry relative="1" x="-0.1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1000" y="490" />
+              <mxPoint x="850" y="490" />
+              <mxPoint x="850" y="630" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="processor-disk" edge="1" parent="1" source="processor" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;fontFamily=Arial;fontColor=#222222;fontSize=14;strokeColor=#555555;endArrow=block;endFill=1;" target="disk" value="читает архив">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1080" y="490" />
+              <mxPoint x="1080" y="490" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="scheduler-disk" edge="1" parent="1" source="scheduler" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;fontFamily=Arial;fontColor=#222222;fontSize=14;strokeColor=#555555;endArrow=block;endFill=1;exitX=0.2;exitY=1;entryX=0.5;entryY=1;" target="disk" value="удаляет архив">
+          <mxGeometry relative="1" x="-0.1605" as="geometry">
+            <Array as="points">
+              <mxPoint x="240" y="700" />
+              <mxPoint x="1080" y="700" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend-title" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;shape=rectangle;fillColor=none;strokeColor=none;fontSize=15;fontStyle=1;align=left;" value="Обозначения" vertex="1">
+          <mxGeometry height="28" width="160" x="50" y="760" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-arrow" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;shape=rectangle;fillColor=none;strokeColor=none;fontSize=14;align=left;" value="Стрелка — обращение к компоненту" vertex="1">
+          <mxGeometry height="25" width="340" x="50" y="790" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-band" parent="1" style="html=0;fontFamily=Arial;fontColor=#222222;shape=rectangle;fillColor=none;strokeColor=none;fontSize=14;align=left;" value="Пунктирная область — группа компонентов" vertex="1">
+          <mxGeometry height="25" width="380" x="50" y="820" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
