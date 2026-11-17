@@ -32,8 +32,10 @@ def main() -> None:
             import uvicorn
 
             from metrics_srv.api import create_app
+            from metrics_srv.domains.imports.analytics import MetricsReader
 
-            uvicorn.run(create_app(settings, service), host="0.0.0.0", port=8000)
+            app = create_app(settings, service, metrics_reader=MetricsReader(settings, sessions))
+            uvicorn.run(app, host="0.0.0.0", port=8000)
         elif role == "scheduler":
             from metrics_srv.domains.imports.cleanup import ArchiveCleanup
             from metrics_srv.workers.scheduler import run_scheduler

@@ -38,8 +38,9 @@ class ImportProcessor:
                 if row is None or row.status not in ("pending", "processing"):
                     return
                 if row.attempt_count >= 3:
-                    row.status = "failed"
-                    row.error_message = "Исчерпаны попытки обработки импорта"
+                    self._repository.mark_failed(
+                        session, import_id, "Исчерпаны попытки обработки импорта"
+                    )
                     return
                 row.status = "processing"
                 row.attempt_count += 1
@@ -52,11 +53,13 @@ class ImportProcessor:
                 )
             except (InvalidArchiveError, FileNotFoundError):
                 with session.begin():
-                    row.status = "failed"
-                    row.error_message = "Не удалось прочитать результаты Allure"
+                    self._repository.mark_failed(
+                        session, import_id, "Не удалось прочитать результаты Allure"
+                    )
                 return
 
             with session.begin():
                 self._repository.add_results(session, import_id, tests)
                 row.status = "completed"
                 row.error_message = None
+                row.failed_at = None

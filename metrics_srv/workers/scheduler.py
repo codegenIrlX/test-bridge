@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+from pathlib import Path
+from shutil import disk_usage
 
 from bullmq import Job, Queue
 from redis.exceptions import RedisError
@@ -48,12 +50,30 @@ async def _cleanup_archives(
     archive_cleanup: ArchiveCleanup, stop: asyncio.Event, interval: int,
 ) -> None:
     while not stop.is_set():
-        for cleanup in (archive_cleanup.cleanup_completed, archive_cleanup.cleanup_orphans):
+        for cleanup in (archive_cleanup.cleanup_due_archives, archive_cleanup.cleanup_orphans):
             try:
                 await asyncio.to_thread(cleanup)
             except (DatabaseError, OSError) as exc:
                 logger.error("Ошибка очистки архивов: %s", type(exc).__name__)
         await _wait_for_next_cycle(stop, interval)
+
+
+async def _report_health(service: ImportService, storage_path: Path, stop: asyncio.Event) -> None:
+    while not stop.is_set():
+        oldest_age, free_bytes = None, None
+        try:
+            oldest_age = await asyncio.to_thread(service.oldest_unfinished_age_seconds)
+        except DatabaseError as exc:
+            logger.warning("Не удалось измерить возраст импорта: %s", type(exc).__name__)
+        try:
+            free_bytes = (await asyncio.to_thread(disk_usage, storage_path)).free
+        except OSError as exc:
+            logger.warning("Не удалось измерить свободное место архивов: %s", type(exc).__name__)
+        logger.info(
+            "Состояние импорта: oldest_unfinished_age_seconds=%s archive_free_bytes=%s",
+            oldest_age, free_bytes,
+        )
+        await _wait_for_next_cycle(stop, 60)
 
 
 async def run_scheduler(
@@ -66,6 +86,7 @@ async def run_scheduler(
     try:
         async with asyncio.TaskGroup() as tasks:
             tasks.create_task(_cleanup_archives(cleanup, stop, interval))
+            tasks.create_task(_report_health(service, settings.storage_path, stop))
             scheduling = tasks.create_task(_schedule_imports(service, queue, stop, interval))
             await stop.wait()
             # Ожидание Redis можно прервать, а начатой очистке даём завершиться.

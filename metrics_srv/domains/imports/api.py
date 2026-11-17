@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import hmac
+from collections.abc import Callable
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from fastapi import Path as ApiPath
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import AfterValidator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -17,6 +19,7 @@ from metrics_srv.config import Settings
 from metrics_srv.domains.imports.archive_storage import ArchiveTooLargeError
 from metrics_srv.domains.imports.dto.read.error_response import ErrorResponseDto
 from metrics_srv.domains.imports.dto.read.import_response import ImportResponseDto
+from metrics_srv.domains.imports.repository import ImportMetadata
 from metrics_srv.domains.imports.services import IdempotencyConflictError, ImportService
 
 bearer = HTTPBearer(auto_error=False)
@@ -36,6 +39,23 @@ def error_response(status: int, code: str, message: str, headers: dict | None = 
         status_code=status, content={"error": {"code": code, "message": message, "details": []}},
         headers=headers,
     )
+
+
+def _validate_pg_text(value: str) -> str:
+    if "\x00" in value:
+        raise ValueError("Поле содержит символ, который PostgreSQL не принимает")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError("Поле содержит символ, который PostgreSQL не принимает") from exc
+    return value
+
+
+FormText = Annotated[str, AfterValidator(_validate_pg_text)]
+
+
+def _blank_as_none(value: str | None) -> str | None:
+    return value if value is not None and value.strip() else None
 
 
 class UploadGuard:
@@ -84,9 +104,10 @@ class UploadGuard:
         await self.app(scope, limited_receive, send)
 
 
-def create_router(settings: Settings, service: ImportService) -> APIRouter:
-    """Подключить маршруты импорта и проверку сервисного токена."""
-    router = APIRouter()
+def service_authorization(
+    settings: Settings,
+) -> Callable[[HTTPAuthorizationCredentials | None], None]:
+    """Создаёт зависимость FastAPI для проверки сервисного токена."""
 
     def authorize(
         credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
@@ -95,6 +116,14 @@ def create_router(settings: Settings, service: ImportService) -> APIRouter:
             credentials.credentials.encode(), settings.api_token.encode()
         ):
             raise HTTPException(401, "Недействительный сервисный токен", headers={"WWW-Authenticate": "Bearer"})
+
+    return authorize
+
+
+def create_router(settings: Settings, service: ImportService) -> APIRouter:
+    """Подключить маршруты импорта и проверку сервисного токена."""
+    router = APIRouter()
+    authorize = service_authorization(settings)
 
     @router.post(
         "/api/v1/imports", response_model=ImportResponseDto, status_code=202,
@@ -111,9 +140,31 @@ def create_router(settings: Settings, service: ImportService) -> APIRouter:
             alias="Idempotency-Key", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$",
             description="Стабильный ключ для повторной отправки того же ZIP",
         )] = None,
+        project: Annotated[FormText | None, Form(
+            max_length=255, description="Проект Jenkins"
+        )] = None,
+        job: Annotated[FormText | None, Form(
+            max_length=255, description="Полное имя задания Jenkins"
+        )] = None,
+        build_number: Annotated[FormText | None, Form(
+            alias="buildNumber", max_length=255, description="Номер сборки Jenkins"
+        )] = None,
+        build_url: Annotated[FormText | None, Form(
+            alias="buildUrl", max_length=2048, description="Ссылка на сборку Jenkins"
+        )] = None,
+        revision: Annotated[FormText | None, Form(
+            max_length=255, description="Ревизия исходного кода сборки"
+        )] = None,
     ) -> ImportResponseDto:
+        metadata: ImportMetadata = {
+            "project": _blank_as_none(project),
+            "job": _blank_as_none(job),
+            "build_number": _blank_as_none(build_number),
+            "build_url": _blank_as_none(build_url),
+            "revision": _blank_as_none(revision),
+        }
         try:
-            row = service.upload(file.file, idempotency_key)
+            row = service.upload(file.file, idempotency_key, metadata)
         except ArchiveTooLargeError as exc:
             raise HTTPException(413, "Архив превышает допустимый размер") from exc
         except IdempotencyConflictError as exc:

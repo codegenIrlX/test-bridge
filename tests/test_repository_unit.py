@@ -68,7 +68,10 @@ def test_failed_parse_keeps_archive_and_records_failure(
     processor.process_import(import_id)
 
     assert archive.exists()
-    assert row.status == "failed" and row.error_message
+    repository.mark_failed.assert_called_once()
+    assert repository.mark_failed.call_args.args[1:] == (
+        import_id, "Не удалось прочитать результаты Allure",
+    )
     repository.add_results.assert_not_called()
 
 
@@ -84,8 +87,11 @@ def test_exhausted_processing_attempts_preserve_archive(
     processor.process_import(import_id)
 
     assert archive.exists()
-    assert row.status == "failed" and row.attempt_count == 3
-    assert row.error_message == "Исчерпаны попытки обработки импорта"
+    assert row.attempt_count == 3
+    repository.mark_failed.assert_called_once()
+    assert repository.mark_failed.call_args.args[1:] == (
+        import_id, "Исчерпаны попытки обработки импорта",
+    )
     repository.add_results.assert_not_called()
 
 
@@ -104,13 +110,13 @@ def test_archive_cleanup_can_retry_after_filesystem_error(
 
     with monkeypatch.context() as patch:
         patch.setattr(Path, "unlink", reject_unlink)
-        cleanup.cleanup_completed()
+        cleanup.cleanup_due_archives()
     assert archive.exists()
     repository.mark_archive_deleted.assert_not_called()
     repository.defer_archive_cleanup.assert_called_once()
     assert repository.defer_archive_cleanup.call_args.args[1] == import_id
 
-    cleanup.cleanup_completed()
+    cleanup.cleanup_due_archives()
     assert not archive.exists()
     repository.mark_archive_deleted.assert_called_once()
     assert repository.mark_archive_deleted.call_args.args[1] == import_id

@@ -24,8 +24,8 @@ class ArchiveCleanup:
         self._repository = repository
         self._storage = ArchiveStorage(settings.storage_path)
 
-    def cleanup_completed(self) -> None:
-        """Удаляет архивы завершённых импортов и откладывает повторы после ошибки."""
+    def cleanup_due_archives(self) -> None:
+        """Удаляет ZIP завершённых импортов и просроченные ZIP неуспешных импортов."""
         deferred_count = 0
         with self._sessions.begin() as session:
             for import_id in self._repository.archives_due_for_cleanup(session):

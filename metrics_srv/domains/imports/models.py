@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    String,
     Text,
     UniqueConstraint,
     false,
@@ -67,6 +68,9 @@ class Import(UUIDPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), comment="Время регистрации импорта"
     )
+    failed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Время перехода импорта в состояние failed"
+    )
     archive_cleanup_after: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), comment="Время следующей попытки удаления архива"
     )
@@ -75,6 +79,13 @@ class Import(UUIDPrimaryKeyMixin, Base):
     )
     archive_sha256: Mapped[str | None] = mapped_column(
         Text, comment="Контрольная сумма SHA-256 архива с ключом повторной отправки"
+    )
+    project: Mapped[str | None] = mapped_column(String(255), comment="Проект Jenkins")
+    job: Mapped[str | None] = mapped_column(String(255), comment="Полное имя задания Jenkins")
+    build_number: Mapped[str | None] = mapped_column(String(255), comment="Номер сборки Jenkins")
+    build_url: Mapped[str | None] = mapped_column(String(2048), comment="Ссылка на сборку Jenkins")
+    revision: Mapped[str | None] = mapped_column(
+        String(255), comment="Ревизия исходного кода сборки"
     )
 
 
@@ -93,6 +104,8 @@ class TestResult(UUIDPrimaryKeyMixin, ExecutionTimeMixin, Base):
     )
     position: Mapped[int] = mapped_column(comment="Порядок результата в архиве")
     name: Mapped[str] = mapped_column(Text, comment="Название теста из Allure")
+    status: Mapped[str | None] = mapped_column(Text, comment="Статус результата теста из Allure")
+    history_id: Mapped[str | None] = mapped_column(Text, comment="Идентификатор истории теста Allure")
 
 
 class TestStep(UUIDPrimaryKeyMixin, ExecutionTimeMixin, Base):
@@ -112,3 +125,4 @@ class TestStep(UUIDPrimaryKeyMixin, ExecutionTimeMixin, Base):
     )
     position: Mapped[int] = mapped_column(comment="Порядок шага среди соседних шагов")
     name: Mapped[str] = mapped_column(Text, comment="Название шага из Allure")
+    status: Mapped[str | None] = mapped_column(Text, comment="Статус шага из Allure")

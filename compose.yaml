@@ -1,3 +1,5 @@
+name: testbridge
+
 x-import-storage-path: &import-storage-path /data/imports
 x-import-volume: &import-volume
   type: volume
@@ -16,17 +18,19 @@ x-application: &application
 services:
   tmpfs-keeper:
     build: .
-    command: ["sleep", "infinity"]
+    command: [ "sleep", "infinity" ]
     volumes:
       - application-secret:/run/secret-volume:ro
       - postgres-bootstrap:/run/postgres-bootstrap:ro
       - board-auth:/run/board-auth:ro
+      - otel-auth:/run/otel-auth:ro
+      - grafana-auth:/run/grafana-auth:ro
     restart: unless-stopped
 
   secret-bootstrap:
     build: .
     user: "0:0"
-    command: ["python", "deploy/bootstrap_secret.py"]
+    command: [ "python", "deploy/bootstrap_secret.py" ]
     depends_on:
       tmpfs-keeper:
         condition: service_started
@@ -38,7 +42,7 @@ services:
 
   postgres-bootstrap:
     <<: *application
-    command: ["python", "deploy/init_postgres.py"]
+    command: [ "python", "deploy/init_postgres.py" ]
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - application-secret:/run/secrets:ro
@@ -51,7 +55,7 @@ services:
     image: postgres:17
     ports:
       - "127.0.0.1:5433:5432"
-    entrypoint: ["/bin/sh", "/opt/testbridge/postgres-entrypoint.sh"]
+    entrypoint: [ "/bin/sh", "/opt/testbridge/postgres-entrypoint.sh" ]
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
@@ -60,25 +64,27 @@ services:
       - postgres-bootstrap:/run/postgres-bootstrap:ro
       - ./deploy/postgres-entrypoint.sh:/opt/testbridge/postgres-entrypoint.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$(cat /run/postgres-bootstrap/user)\" -d \"$$(cat /run/postgres-bootstrap/database)\""]
+      test: [ "CMD-SHELL", "pg_isready -U \"$$(cat /run/postgres-bootstrap/user)\" -d \"$$(cat /run/postgres-bootstrap/database)\"" ]
       interval: 5s
       timeout: 3s
       retries: 20
 
   redis:
     image: redis:7
-    command: ["redis-server", "--appendonly", "yes"]
+    command: [ "redis-server", "--appendonly", "yes" ]
+    ports:
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 20
 
   board-bootstrap:
     <<: *application
-    command: ["python", "deploy/init_board.py"]
+    command: [ "python", "deploy/init_board.py" ]
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - application-secret:/run/secrets:ro
@@ -89,7 +95,7 @@ services:
 
   bull-board:
     image: ghcr.io/felixmosh/bull-board@sha256:3945a71616dd6478cca39c4a315febd0fa0b1838327060fcb93fd88d061181bf
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: [ "/bin/sh", "-c" ]
     command:
       - 'set -eu; export BULL_BOARD_USER=admin; BULL_BOARD_PASSWORD="$$(cat /run/board/password)"; test -n "$$BULL_BOARD_PASSWORD"; export BULL_BOARD_PASSWORD; exec bull-board --redis redis://redis:6379 --read-only'
     volumes:
@@ -107,14 +113,14 @@ services:
 
   migrate:
     <<: *application
-    command: ["python", "-m", "metrics_srv", "migrate"]
+    command: [ "python", "-m", "metrics_srv", "migrate" ]
     depends_on:
       postgres:
         condition: service_healthy
 
   api:
     <<: *application
-    command: ["python", "-m", "metrics_srv", "api"]
+    command: [ "python", "-m", "metrics_srv", "api" ]
     ports:
       - "8000:8000"
     volumes:
@@ -132,7 +138,7 @@ services:
 
   scheduler:
     <<: *application
-    command: ["python", "-m", "metrics_srv", "scheduler"]
+    command: [ "python", "-m", "metrics_srv", "scheduler" ]
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - application-secret:/run/secrets:ro
@@ -142,12 +148,86 @@ services:
 
   processor:
     <<: *application
-    command: ["python", "-m", "metrics_srv", "processor"]
+    command: [ "python", "-m", "metrics_srv", "processor" ]
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - application-secret:/run/secrets:ro
       - *import-volume
     depends_on: *application-dependencies
+    restart: unless-stopped
+
+  analytics-bootstrap:
+    build: .
+    user: "0:0"
+    command: [ "python", "deploy/analytics_bootstrap.py" ]
+    environment:
+      METRICS_SRV_ENV: ${METRICS_SRV_ENV:-development}
+    depends_on:
+      tmpfs-keeper:
+        condition: service_started
+      secret-bootstrap:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - application-secret:/run/app-secrets:ro
+      - otel-auth:/run/otel-auth
+      - grafana-auth:/run/grafana-auth
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    user: "10001"
+    command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
+    depends_on:
+      analytics-bootstrap:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+      victoriametrics:
+        condition: service_started
+    volumes:
+      - ./deploy/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - otel-auth:/run/otel-auth:ro
+    restart: unless-stopped
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.116.0
+    command: [ "-storageDataPath=/storage" ]
+    ports:
+      - "127.0.0.1:8428:8428"
+    volumes:
+      - victoria-data:/storage
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    user: "472:0"
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export TESTBRIDGE_GRAFANA_DATABASE_PASSWORD="$$(cat /run/grafana-auth/database-password)"
+        export TESTBRIDGE_GRAFANA_DATABASE_URL="$$(cat /run/grafana-auth/database-url)"
+        export TESTBRIDGE_GRAFANA_DATABASE_NAME="$$(cat /run/grafana-auth/database-name)"
+        exec /run.sh
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/grafana-auth/password
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    depends_on:
+      analytics-bootstrap:
+        condition: service_completed_successfully
+      victoriametrics:
+        condition: service_started
+    ports:
+      - "127.0.0.1:${TESTBRIDGE_GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana-auth:/run/grafana-auth:ro
+      - grafana-data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/testbridge-dashboards:ro
     restart: unless-stopped
 
 secrets:
@@ -158,6 +238,8 @@ volumes:
   postgres-data:
   redis-data:
   import-data:
+  victoria-data:
+  grafana-data:
   board-auth:
     driver: local
     driver_opts:
@@ -176,3 +258,15 @@ volumes:
       type: tmpfs
       device: tmpfs
       o: size=1m,mode=1777
+  otel-auth:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=0755
+  grafana-auth:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=0755

@@ -18,6 +18,7 @@ else:
     _ZSTD_ERRORS = (ZstdError,)
 
 _MAX_BIGINT = (1 << 63) - 1
+_ALLURE_STATUSES = frozenset(("passed", "failed", "broken", "skipped", "unknown"))
 _ZIP_READ_ERRORS = (
     BadZipFile, EOFError, UnicodeDecodeError, RuntimeError, zlib.error, LZMAError, *_ZSTD_ERRORS
 )
@@ -35,6 +36,7 @@ class ParsedStep:
     start: int | None
     stop: int | None
     steps: list[ParsedStep]
+    status: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +47,18 @@ class ParsedTest:
     start: int | None
     stop: int | None
     steps: list[ParsedStep]
+    status: str | None = None
+    history_id: str | None = None
+
+
+def _parse_history_id(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip() or "\x00" in value:
+        return None
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+    return value
 
 
 def _parse_item(value: object, depth: int = 0) -> ParsedStep:
@@ -70,7 +84,14 @@ def _parse_item(value: object, depth: int = 0) -> ParsedStep:
     steps = value.get("steps", [])
     if not isinstance(steps, list):
         raise InvalidArchiveError("Некорректный список шагов")
-    return ParsedStep(name, times[0], times[1], [_parse_item(step, depth + 1) for step in steps])
+    status = value.get("status")
+    return ParsedStep(
+        name,
+        times[0],
+        times[1],
+        [_parse_item(step, depth + 1) for step in steps],
+        status if isinstance(status, str) and status in _ALLURE_STATUSES else None,
+    )
 
 
 def _read_result(archive: ZipFile, entry: ZipInfo) -> object:
@@ -108,8 +129,14 @@ def parse_archive(
                 raise InvalidArchiveError("Превышен размер результатов после распаковки")
             result = []
             for entry in entries:
-                item = _parse_item(_read_result(archive, entry))
-                result.append(ParsedTest(item.name, item.start, item.stop, item.steps))
+                payload = _read_result(archive, entry)
+                item = _parse_item(payload)
+                history_id = (
+                    _parse_history_id(payload.get("historyId")) if isinstance(payload, dict) else None
+                )
+                result.append(ParsedTest(
+                    item.name, item.start, item.stop, item.steps, item.status, history_id,
+                ))
             return result
     except (BadZipFile, EOFError, UnicodeDecodeError) as exc:
         raise InvalidArchiveError("Не удалось прочитать результаты Allure") from exc

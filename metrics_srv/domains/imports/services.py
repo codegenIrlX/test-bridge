@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from metrics_srv.config import Settings
 from metrics_srv.domains.imports.archive_storage import ArchiveStorage
-from metrics_srv.domains.imports.repository import ImportRepository, ImportState
+from metrics_srv.domains.imports.repository import ImportMetadata, ImportRepository, ImportState
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,9 @@ class ImportService:
         self._repository = repository
         self._storage = ArchiveStorage(settings.storage_path)
 
-    def upload(self, file: BinaryIO, idempotency_key: str | None) -> ImportState:
+    def upload(
+        self, file: BinaryIO, idempotency_key: str | None, metadata: ImportMetadata | None = None
+    ) -> ImportState:
         """Сохраняет ZIP до регистрации импорта в БД."""
         import_id = uuid4()
         archive_sha256 = self._storage.save(
@@ -41,7 +43,7 @@ class ImportService:
         )
         with self._sessions.begin() as session:
             if idempotency_key is None:
-                self._repository.create_import(session, import_id)
+                self._repository.create_import(session, import_id, metadata)
                 return {
                     "id": import_id,
                     "status": "pending",
@@ -50,7 +52,7 @@ class ImportService:
                 }
             assert archive_sha256 is not None
             row = self._repository.register_keyed_import(
-                session, import_id, idempotency_key, archive_sha256
+                session, import_id, idempotency_key, archive_sha256, metadata
             )
 
         if row is None or row["id"] != import_id:
@@ -72,15 +74,26 @@ class ImportService:
         with self._sessions() as session:
             return self._repository.pending_ids(session)
 
+    def oldest_unfinished_age_seconds(self) -> float | None:
+        """Возвращает возраст самого старого импорта в очереди или обработке."""
+        with self._sessions() as session:
+            return self._repository.oldest_unfinished_age_seconds(session)
+
     def retry_import(self, import_id: UUID) -> Literal["not_found", "conflict", "pending"]:
         """Сбрасывает счётчик попыток неуспешного импорта, если ZIP сохранился."""
         with self._sessions.begin() as session:
             row = self._repository.lock_import(session, import_id)
             if row is None:
                 return "not_found"
-            if row.status != "failed" or not self._storage.archive_path(import_id).is_file():
+            if (
+                row.status != "failed"
+                or row.archive_deleted
+                or not self._storage.archive_path(import_id).is_file()
+            ):
                 return "conflict"
             row.status = "pending"
             row.attempt_count = 0
             row.error_message = None
+            row.failed_at = None
+            row.archive_cleanup_after = None
             return "pending"

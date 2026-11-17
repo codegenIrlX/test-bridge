@@ -1,34 +1,19 @@
 # Отправка результатов из Jenkins
 
-Подготовьте ZIP с исходным каталогом `allure-results` и сохраните его в рабочем каталоге как `allure-results.zip`. Адрес платформы задайте переменной Jenkins `METRICS_SRV_URL`, а сервисный токен сохраните в Jenkins Credentials с идентификатором `metrics-srv-token`. Задайте стабильный и уникальный для контроллера идентификатор `TESTBRIDGE_JENKINS_ID`.
-
-Этот фрагмент Declarative Pipeline выполняется после сборки, в том числе при падении тестов. Ошибка отправки отмечается в журнале и не меняет результат сборки. `202 Accepted` означает, что архив принят, но не подтверждает его обработку.
+Эталонная функция `publishAllureToTestBridge()` находится в Jenkinsfile проекта `qa-lab-test-framework`. Вызовите её в `post.always` стадии с агентом, перед архивацией отчётов.
 
 ```groovy
 post {
     always {
         script {
-            catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                withCredentials([string(
-                    credentialsId: 'metrics-srv-token',
-                    variable: 'METRICS_TOKEN'
-                )]) {
-                    sh '''
-                        set +x
-                        set -eu
-                        delivery_key=$(printf '%s\\n' "$TESTBRIDGE_JENKINS_ID" "$JOB_NAME" "$BUILD_NUMBER" | sha256sum)
-                        delivery_key=${delivery_key%% *}
-                        curl --fail --silent --show-error \
-                          -H "Authorization: Bearer $METRICS_TOKEN" \
-                          -H "Idempotency-Key: $delivery_key" \
-                          -F "file=@allure-results.zip" \
-                          "$METRICS_SRV_URL/api/v1/imports"
-                    '''
-                }
-            }
+            publishAllureToTestBridge()
         }
     }
 }
 ```
 
-Пример использует Unix-агент с `curl` и `sha256sum` и отправляет один ZIP на сборку. Если ответ потерялся, повторите запрос с тем же ключом и исходным ZIP. TestBridge вернёт `202`, прежний `importId` и текущее состояние импорта. При том же ключе и других байтах ZIP вернётся `409`. Заголовок необязателен. Без него каждый запрос регистрируется отдельно. Чтобы проверить результат разбора, используйте `GET /api/v1/imports/{importId}`.
+Задайте `TESTBRIDGE_URL = 'http://host.docker.internal:8000'` для агента Docker Desktop. Сохраните токен API в Jenkins Credentials как Secret Text `testbridge-metrics-srv`. Агенту нужны `curl`, `zip`, `sha256sum` и Python. В команде архивации добавьте `${env.REPORT_DIR}/allure-results.zip` и `${env.REPORT_DIR}/upload-response.json`.
+
+Вызов выполняется и при падении тестов. Если Allure не создал ни одного `*-result.json`, отправка пропускается. Функция упаковывает весь каталог `allure-results`, включая вложения, и передаёт проект, имя джобы, номер и URL сборки и SHA проверенных исходников. Временная ошибка приводит к повторной отправке того же ZIP с тем же ключом. Ключ формируется из URL контроллера, имени джобы и номера сборки.
+
+При `202` журнал показывает `TestBridge importId`. Чтобы проверить обработку, запросите `GET /api/v1/imports/{importId}` с тем же токеном и проверьте `completed` и `archiveDeleted: true`. Повтор с тем же ключом и байтами возвращает прежний `importId`. При других байтах API возвращает `409`. Ошибка передачи отмечается на этапе и сохраняет результат тестов.

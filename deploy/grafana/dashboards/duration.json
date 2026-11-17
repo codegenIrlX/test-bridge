@@ -1,0 +1,258 @@
+{
+  "uid": "testbridge-duration",
+  "title": "TestBridge — Длительность тестов",
+  "tags": [
+    "testbridge",
+    "testbridge-results"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "timezone": "utc",
+  "refresh": "30s",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "title": "Дашборды TestBridge",
+      "tags": [
+        "testbridge-results"
+      ],
+      "asDropdown": true,
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "project",
+        "label": "Проект",
+        "type": "query",
+        "datasource": {
+          "uid": "testbridge-postgres",
+          "type": "postgres"
+        },
+        "definition": "SELECT DISTINCT project\nFROM public.dashboard_imports\nWHERE project IS NOT NULL\nORDER BY project",
+        "query": "SELECT DISTINCT project\nFROM public.dashboard_imports\nWHERE project IS NOT NULL\nORDER BY project",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 2,
+        "sort": 0,
+        "current": {
+          "text": "qa-lab-test-framework",
+          "value": "qa-lab-test-framework",
+          "selected": true
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "P50 и P95 по дням",
+      "description": "Длительность итоговых тестов по дню регистрации импорта в UTC.",
+      "datasource": {
+        "uid": "testbridge-postgres",
+        "type": "postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "always",
+            "pointSize": 5
+          },
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "testbridge-postgres",
+            "type": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT GREATEST(date_trunc('day', created_at, 'UTC'), $__timeFrom()::timestamptz) AS time,\n       percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_seconds) AS \"P50\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_seconds) AS \"P95\"\nFROM public.dashboard_final_results\nWHERE project = ANY(ARRAY[${project:sqlstring}]::text[])\n  AND $__timeFilter(created_at)\n  AND duration_seconds IS NOT NULL\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Длительность по тестам",
+      "description": "Итоговые выполнения с доступной длительностью за выбранный период.",
+      "datasource": {
+        "uid": "testbridge-postgres",
+        "type": "postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 13
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P50"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom",
+                "value": {
+                  "align": "right",
+                  "width": 115
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P95"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom",
+                "value": {
+                  "align": "right",
+                  "width": 115
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Измерения"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom",
+                "value": {
+                  "align": "right",
+                  "width": 135
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "testbridge-postgres",
+            "type": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT name AS \"Тест\",\n       percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_seconds) AS \"P50\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_seconds) AS \"P95\",\n       count(*) AS \"Измерения\"\nFROM public.dashboard_final_results\nWHERE project = ANY(ARRAY[${project:sqlstring}]::text[])\n  AND $__timeFilter(created_at)\n  AND duration_seconds IS NOT NULL\nGROUP BY name\nORDER BY \"P95\" DESC, name"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "enablePagination": true
+      }
+    }
+  ]
+}

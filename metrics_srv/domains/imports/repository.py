@@ -6,7 +6,7 @@ from datetime import timedelta
 from typing import Literal, TypedDict, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, insert, literal, or_, select, update
+from sqlalchemy import and_, extract, func, insert, literal, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,9 @@ from metrics_srv.domains.imports.parser import ParsedStep, ParsedTest
 type ImportStatus = Literal["pending", "processing", "completed", "failed"]
 type StepRow = dict[str, UUID | int | str | None]
 
+_UNFINISHED_STATUSES = ("pending", "processing")
+_FAILED_ARCHIVE_RETENTION = timedelta(days=7)
+
 
 class ImportState(TypedDict):
     """Снимок полей импорта после чтения из БД."""
@@ -24,6 +27,16 @@ class ImportState(TypedDict):
     status: ImportStatus
     error_message: str | None
     archive_deleted: bool
+
+
+class ImportMetadata(TypedDict):
+    """Метаданные сборки, присланные вместе с ZIP."""
+
+    project: str | None
+    job: str | None
+    build_number: str | None
+    build_url: str | None
+    revision: str | None
 
 
 def _snapshot(row: Import) -> ImportState:
@@ -46,6 +59,7 @@ def _append_steps(
             "parent_id": parent_id,
             "position": position,
             "name": step.name,
+            "status": step.status,
             "started_at_ms": step.start,
             "stopped_at_ms": step.stop,
         })
@@ -55,17 +69,26 @@ def _append_steps(
 class ImportRepository:
     """Работает с импортами в переданной сессии."""
 
-    def create_import(self, session: Session, import_id: UUID) -> None:
+    def create_import(
+        self, session: Session, import_id: UUID, metadata: ImportMetadata | None = None
+    ) -> None:
         """Добавляет запись о принятом архиве."""
-        session.add(Import(id=import_id))
+        session.add(Import(id=import_id, **(metadata or {})))
 
     def register_keyed_import(
-        self, session: Session, import_id: UUID, key: str, archive_sha256: str
+        self,
+        session: Session,
+        import_id: UUID,
+        key: str,
+        archive_sha256: str,
+        metadata: ImportMetadata | None = None,
     ) -> ImportState | None:
         """Возвращает новый или существующий импорт с тем же ключом и хешем."""
         row = session.scalar(
             pg_insert(Import)
-            .values(id=import_id, idempotency_key=key, archive_sha256=archive_sha256)
+            .values(
+                id=import_id, idempotency_key=key, archive_sha256=archive_sha256, **(metadata or {}),
+            )
             .on_conflict_do_nothing(
                 index_elements=[Import.idempotency_key],
                 index_where=Import.idempotency_key.is_not(None),
@@ -92,10 +115,18 @@ class ImportRepository:
         """Выбирает до ста незавершённых импортов для Scheduler."""
         return list(session.scalars(
             select(Import.id)
-            .where(Import.status.in_(("pending", "processing")))
+            .where(Import.status.in_(_UNFINISHED_STATUSES))
             .order_by(Import.created_at)
             .limit(100)
         ))
+
+    def oldest_unfinished_age_seconds(self, session: Session) -> float | None:
+        """Возвращает возраст самого старого незавершённого импорта в секундах."""
+        age = session.scalar(
+            select(extract("epoch", func.statement_timestamp() - func.min(Import.created_at)))
+            .where(Import.status.in_(_UNFINISHED_STATUSES))
+        )
+        return float(age) if age is not None else None
 
     def lock_import(self, session: Session, import_id: UUID) -> Import | None:
         """Читает и блокирует строку до конца транзакции."""
@@ -105,6 +136,14 @@ class ImportRepository:
         """Пытается закрепить обработку импорта за текущим соединением."""
         return bool(session.scalar(
             select(func.pg_try_advisory_lock(func.hashtextextended(str(import_id), 0)))
+        ))
+
+    def mark_failed(self, session: Session, import_id: UUID, error_message: str) -> None:
+        """Записывает ошибку импорта и начало отсчёта срока хранения его ZIP."""
+        session.execute(update(Import).where(Import.id == import_id).values(
+            status="failed",
+            error_message=error_message,
+            failed_at=func.statement_timestamp(),
         ))
 
     def add_results(self, session: Session, import_id: UUID, tests: list[ParsedTest]) -> None:
@@ -118,6 +157,8 @@ class ImportRepository:
                 "import_id": import_id,
                 "position": position,
                 "name": test.name,
+                "status": test.status,
+                "history_id": test.history_id,
                 "started_at_ms": test.start,
                 "stopped_at_ms": test.stop,
             })
@@ -130,17 +171,27 @@ class ImportRepository:
 
     def archives_due_for_cleanup(self, session: Session) -> list[UUID]:
         """Блокирует до ста импортов, архивы которых пора удалить."""
+        now = func.statement_timestamp()
         return list(session.scalars(
             select(Import.id)
             .where(
-                Import.status == "completed",
+                or_(
+                    Import.status == "completed",
+                    and_(
+                        Import.status == "failed",
+                        Import.failed_at <= now - literal(_FAILED_ARCHIVE_RETENTION),
+                    ),
+                ),
                 Import.archive_deleted.is_(False),
                 or_(
                     Import.archive_cleanup_after.is_(None),
-                    Import.archive_cleanup_after <= func.current_timestamp(),
+                    Import.archive_cleanup_after <= now,
                 ),
             )
-            .order_by(func.coalesce(Import.archive_cleanup_after, Import.created_at), Import.id)
+            .order_by(
+                func.coalesce(Import.archive_cleanup_after, Import.failed_at, Import.created_at),
+                Import.id,
+            )
             .limit(100)
             .with_for_update(skip_locked=True)
         ))

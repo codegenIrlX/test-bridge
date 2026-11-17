@@ -74,6 +74,41 @@ def test_parse_multiple_results_without_steps_or_times(tmp_path: Path) -> None:
     assert all(test.start is None and test.stop is None and not test.steps for test in tests)
 
 
+def test_parse_allure_status_and_opaque_history_id(tmp_path: Path) -> None:
+    archive = write_archive(
+        tmp_path / "results.zip",
+        {
+            "known-result.json": json.dumps({
+                "name": "Known",
+                "status": "unknown",
+                "historyId": "  preserved  ",
+                "steps": [{
+                    "name": "Outer",
+                    "status": "failed",
+                    "steps": [{"name": "Inner", "status": "passed"}],
+                }],
+            }),
+            "unrecognized-result.json": json.dumps({
+                "name": "Unrecognized", "status": "not-allure", "historyId": " ",
+                "steps": [{"name": "Unrecognized step", "status": {"unexpected": "value"}}],
+            }),
+            "missing-result.json": json.dumps({"name": "Missing"}),
+        },
+    )
+
+    known, unrecognized, missing = parse_archive(
+        archive, max_uncompressed_bytes=100_000, max_result_files=10,
+    )
+
+    assert known.status == "unknown" and known.history_id == "  preserved  "
+    outer, = known.steps
+    assert outer.status == "failed"
+    assert outer.steps[0].status == "passed"
+    assert unrecognized.status is None and unrecognized.history_id is None
+    assert unrecognized.steps[0].status is None
+    assert missing.status is None and missing.history_id is None
+
+
 @pytest.mark.parametrize(
     "entries",
     [

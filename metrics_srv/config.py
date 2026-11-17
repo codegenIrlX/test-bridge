@@ -31,6 +31,7 @@ class Settings:
     max_result_files: int
     scheduler_interval_seconds: int
     api_token: str = field(repr=False)
+    metrics_projects: tuple[str, ...] = ()
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -83,6 +84,18 @@ def _positive_int(section: dict[str, Any], name: str, maximum: int | None = None
     return value
 
 
+def _metrics_projects(config: dict[str, Any]) -> tuple[str, ...]:
+    projects = _section(config, "metrics").get("allowed_projects", [])
+    if not isinstance(projects, list) or len(projects) > 50 or any(
+        not isinstance(project, str) or not project.strip() or len(project) > 255
+        or project in ("unknown", "other")
+        or any(ord(char) < 32 or 0xD800 <= ord(char) <= 0xDFFF for char in project)
+        for project in projects
+    ):
+        raise SettingsError("metrics.allowed_projects должен содержать до 50 имён проектов")
+    return tuple(dict.fromkeys(projects))
+
+
 def load_settings(
     config_path: Path = Path("config.yaml"), secrets_path: Path | None = None
 ) -> Settings:
@@ -118,4 +131,5 @@ def load_settings(
         max_result_files=_positive_int(storage, "max_result_files"),
         scheduler_interval_seconds=_positive_int(scheduler, "interval_seconds"),
         api_token=_text(_section(secrets, "api"), "token"),
+        metrics_projects=_metrics_projects(config),
     )

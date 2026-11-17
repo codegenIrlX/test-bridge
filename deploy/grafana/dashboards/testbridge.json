@@ -1,0 +1,343 @@
+{
+  "uid": "testbridge-imports",
+  "title": "TestBridge — Результаты Allure",
+  "tags": [
+    "testbridge",
+    "testbridge-results"
+  ],
+  "schemaVersion": 39,
+  "version": 4,
+  "editable": false,
+  "timezone": "utc",
+  "refresh": "30s",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "title": "Дашборды TestBridge",
+      "tags": [
+        "testbridge-results"
+      ],
+      "asDropdown": true,
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "project",
+        "label": "Проект",
+        "type": "query",
+        "datasource": {
+          "uid": "testbridge-postgres",
+          "type": "postgres"
+        },
+        "definition": "SELECT DISTINCT project\nFROM public.dashboard_imports\nWHERE project IS NOT NULL\nORDER BY project",
+        "query": "SELECT DISTINCT project\nFROM public.dashboard_imports\nWHERE project IS NOT NULL\nORDER BY project",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 2,
+        "sort": 0,
+        "current": {
+          "text": "qa-lab-test-framework",
+          "value": "qa-lab-test-framework",
+          "selected": true
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Итоговые статусы",
+      "description": "Итог одного теста после повторов в каждом импорте за выбранный период.",
+      "datasource": {
+        "uid": "testbridge-postgres",
+        "type": "postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 18,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "0"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "passed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "broken"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "skipped"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "gray"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unknown"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "testbridge-postgres",
+            "type": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) FILTER (WHERE status = 'passed') AS passed,\n       count(*) FILTER (WHERE status = 'failed') AS failed,\n       count(*) FILTER (WHERE status = 'broken') AS broken,\n       count(*) FILTER (WHERE status = 'skipped') AS skipped,\n       count(*) FILTER (WHERE status = 'unknown') AS unknown\nFROM public.dashboard_final_results\nWHERE project = ANY(ARRAY[${project:sqlstring}]::text[])\n  AND $__timeFilter(created_at)"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "vertical",
+        "wideLayout": false,
+        "textMode": "value_and_name",
+        "text": {"titleSize": 16, "valueSize": 36},
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Состояние сбора",
+      "description": "Последняя минута до конца выбранного периода для всего TestBridge.",
+      "datasource": {
+        "uid": "victoriametrics",
+        "type": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Нет свежих данных",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Ошибка сбора",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "Сбор идёт",
+                  "color": "green"
+                },
+                "-1": {
+                  "text": "Нет свежих данных",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "gray"
+              },
+              {
+                "value": 0,
+                "color": "red"
+              },
+              {
+                "value": 1,
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "victoriametrics",
+            "type": "prometheus"
+          },
+          "expr": "min(last_over_time(up{job=\"testbridge\"}[1m])) or vector(-1)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "horizontal",
+        "textMode": "value",
+        "text": {"valueSize": 28},
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "barchart",
+      "title": "Топ-10 тестов по P95",
+      "description": "P95 итоговых выполнений, сгруппированных по имени теста. Если измерение одно, P95 равен этой длительности.",
+      "datasource": {
+        "uid": "testbridge-postgres",
+        "type": "postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 15
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: с",
+          "decimals": 3,
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "axisCenteredZero": false
+          }
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {"source": "ranked_tests", "format": "json"}
+        },
+        {
+          "id": "organize",
+          "options": {"excludeByName": {"ranked_tests": true}}
+        }
+      ],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "testbridge-postgres",
+            "type": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH top_tests AS (\n    SELECT project || ' — ' || name AS metric, name,\n           percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_seconds) AS p95\n    FROM public.dashboard_final_results\n    WHERE project = ANY(ARRAY[${project:sqlstring}]::text[])\n      AND $__timeFilter(created_at)\n      AND duration_seconds IS NOT NULL\n    GROUP BY project, name\n    ORDER BY p95 DESC, name\n    LIMIT 10\n)\nSELECT 'P95' AS category,\n       json_object_agg(metric, p95 ORDER BY p95 DESC, name)::text AS ranked_tests\nFROM top_tests\nHAVING count(*) > 0"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "xField": "category",
+        "stacking": "none",
+        "showValue": "always",
+        "groupWidth": 0.9,
+        "barWidth": 0.85,
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "right",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    }
+  ]
+}

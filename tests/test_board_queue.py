@@ -1,4 +1,6 @@
 import asyncio
+import logging
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
@@ -30,11 +32,12 @@ async def immediate_thread(function, *args):
     ],
 )
 def test_scheduler_retains_history_and_requeues_terminal_jobs(
-    monkeypatch: pytest.MonkeyPatch, state: str | None, should_remove: bool
+    monkeypatch: pytest.MonkeyPatch, state: str | None, should_remove: bool, tmp_path: Path,
 ) -> None:
     import_id = uuid4()
     service = MagicMock()
     service.pending_ids.return_value = [import_id]
+    service.oldest_unfinished_age_seconds.return_value = None
     cleanup = MagicMock()
     queue = MagicMock()
     queue.add = AsyncMock()
@@ -49,7 +52,9 @@ def test_scheduler_retains_history_and_requeues_terminal_jobs(
     monkeypatch.setattr(scheduler.Job, "fromId", AsyncMock(return_value=job if state else None))
     monkeypatch.setattr(scheduler, "shutdown_event", lambda: stop)
     monkeypatch.setattr(scheduler.asyncio, "to_thread", immediate_thread)
-    settings = SimpleNamespace(redis_host="redis", redis_port=6379, scheduler_interval_seconds=1)
+    settings = SimpleNamespace(
+        redis_host="redis", redis_port=6379, scheduler_interval_seconds=1, storage_path=tmp_path,
+    )
 
     asyncio.run(asyncio.wait_for(scheduler.run_scheduler(settings, service, cleanup), timeout=2))
 
@@ -66,13 +71,14 @@ def test_scheduler_retains_history_and_requeues_terminal_jobs(
 
 @pytest.mark.parametrize("redis_stalls", [False, True], ids=["fails", "stalls"])
 def test_scheduler_cleans_archives_while_redis_is_unavailable(
-    monkeypatch: pytest.MonkeyPatch, redis_stalls: bool
+    monkeypatch: pytest.MonkeyPatch, redis_stalls: bool, tmp_path: Path,
 ) -> None:
     stop = asyncio.Event()
     redis_requested = asyncio.Event()
     archives_cleaned = asyncio.Event()
     service = MagicMock()
     service.pending_ids.return_value = [uuid4()]
+    service.oldest_unfinished_age_seconds.return_value = None
     cleanup = MagicMock()
     cleanup.cleanup_orphans.side_effect = archives_cleaned.set
     queue = MagicMock()
@@ -88,7 +94,9 @@ def test_scheduler_cleans_archives_while_redis_is_unavailable(
     monkeypatch.setattr(scheduler.Job, "fromId", load_job)
     monkeypatch.setattr(scheduler, "shutdown_event", lambda: stop)
     monkeypatch.setattr(scheduler.asyncio, "to_thread", immediate_thread)
-    settings = SimpleNamespace(redis_host="redis", redis_port=6379, scheduler_interval_seconds=60)
+    settings = SimpleNamespace(
+        redis_host="redis", redis_port=6379, scheduler_interval_seconds=60, storage_path=tmp_path,
+    )
 
     async def run_until_cleaned() -> None:
         async with asyncio.TaskGroup() as tasks:
@@ -99,9 +107,40 @@ def test_scheduler_cleans_archives_while_redis_is_unavailable(
 
     asyncio.run(asyncio.wait_for(run_until_cleaned(), timeout=2))
 
-    cleanup.cleanup_completed.assert_called_once()
+    cleanup.cleanup_due_archives.assert_called_once()
     cleanup.cleanup_orphans.assert_called_once()
     queue.close.assert_awaited_once()
+
+
+@pytest.mark.parametrize("disk_error", [False, True], ids=["healthy", "disk-unavailable"])
+def test_scheduler_reports_oldest_import_and_free_space(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
+    disk_error: bool,
+) -> None:
+    service = MagicMock()
+    service.oldest_unfinished_age_seconds.return_value = 42.5
+    stop = asyncio.Event()
+
+    def read_disk_usage(_path: Path) -> SimpleNamespace:
+        stop.set()
+        if disk_error:
+            raise OSError("Disk usage unavailable")
+        return SimpleNamespace(free=3072)
+
+    disk_usage = MagicMock(side_effect=read_disk_usage)
+    monkeypatch.setattr(scheduler, "disk_usage", disk_usage)
+    monkeypatch.setattr(scheduler.asyncio, "to_thread", immediate_thread)
+
+    with caplog.at_level(logging.INFO, logger=scheduler.__name__):
+        asyncio.run(asyncio.wait_for(scheduler._report_health(service, tmp_path, stop), timeout=2))
+
+    disk_usage.assert_called_once_with(tmp_path)
+    service.oldest_unfinished_age_seconds.assert_called_once()
+    free_bytes = "None" if disk_error else "3072"
+    assert f"oldest_unfinished_age_seconds=42.5 archive_free_bytes={free_bytes}" in caplog.text
+    assert any(record.levelno == logging.WARNING for record in caplog.records) == disk_error
 
 
 @pytest.mark.parametrize("status", ["completed", "failed"])

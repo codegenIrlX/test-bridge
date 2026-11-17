@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -6,12 +7,14 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from metrics_srv.api import create_app
 from metrics_srv.config import Settings
+from metrics_srv.domains.imports.analytics import MetricsReader
 from metrics_srv.domains.imports.models import Import
-from metrics_srv.domains.imports.repository import ImportRepository, ImportState
+from metrics_srv.domains.imports.repository import ImportMetadata, ImportRepository, ImportState
 from metrics_srv.domains.imports.services import ImportService
 
 
@@ -21,7 +24,9 @@ class FakeRepository(ImportRepository):
     def __init__(self) -> None:
         self.rows: dict[UUID, Import] = {}
 
-    def create_import(self, session: Session, import_id: UUID) -> None:
+    def create_import(
+        self, session: Session, import_id: UUID, metadata: ImportMetadata | None = None,
+    ) -> None:
         self.rows[import_id] = Import(
             id=import_id, status="pending", error_message=None, archive_deleted=False, attempt_count=0,
         )
@@ -208,6 +213,8 @@ def test_failed_import_can_be_retried(
     row.status = "failed"
     row.error_message = "failed"
     row.attempt_count = 3
+    row.failed_at = datetime.now(UTC)
+    row.archive_cleanup_after = row.failed_at
 
     response = client.post(
         f"/api/v1/imports/{import_id}/retry", headers={"Authorization": "Bearer fake-token"}
@@ -218,6 +225,8 @@ def test_failed_import_can_be_retried(
     assert response.json()["status"] == "pending"
     assert row.error_message is None
     assert row.attempt_count == 0
+    assert row.failed_at is None
+    assert row.archive_cleanup_after is None
 
 
 def test_retry_rejects_missing_or_incomplete_imports(client: TestClient) -> None:
@@ -261,7 +270,12 @@ def test_swagger_schema_describes_upload_status_and_authorization(client: TestCl
     upload = schema["paths"]["/api/v1/imports"]["post"]
     status = schema["paths"]["/api/v1/imports/{import_id}"]["get"]
     retry = schema["paths"]["/api/v1/imports/{import_id}/retry"]["post"]
-    assert "multipart/form-data" in upload["requestBody"]["content"]
+    multipart = upload["requestBody"]["content"]["multipart/form-data"]["schema"]
+    body_schema = schema["components"]["schemas"][multipart["$ref"].rsplit("/", 1)[-1]]
+    assert body_schema["required"] == ["file"]
+    assert {"file", "project", "job", "buildNumber", "buildUrl", "revision"} <= set(
+        body_schema["properties"]
+    )
     assert {"202", "401", "409", "413", "422", "500"}.issubset(upload["responses"])
     key, = upload["parameters"]
     assert key["name"] == "Idempotency-Key" and key["in"] == "header"
@@ -283,3 +297,40 @@ def test_upload_rejects_invalid_idempotency_key(
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "validation_error"
     assert not list(settings.storage_path.iterdir())
+
+
+def test_upload_rejects_invalid_metadata_before_saving_file(
+    client: TestClient, settings: Settings,
+) -> None:
+    response = client.post(
+        "/api/v1/imports",
+        headers={"Authorization": "Bearer fake-token"},
+        data={"project": "x" * 256},
+        files={"file": ("results.zip", b"archive")},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert not list(settings.storage_path.iterdir())
+
+
+def test_metrics_require_auth_and_return_503_if_database_is_unavailable(
+    settings: Settings, service: ImportService,
+) -> None:
+    reader = MagicMock(spec=MetricsReader)
+    reader.render.side_effect = SQLAlchemyError("internal database error")
+    with TestClient(create_app(settings, service, metrics_reader=reader)) as client:
+        operation = client.get("/openapi.json").json()["paths"]["/metrics"]["get"]
+        assert operation["security"]
+        assert "text/plain" in operation["responses"]["200"]["content"]
+        assert {"401", "503"} <= set(operation["responses"])
+
+        denied = client.get("/metrics")
+        assert denied.status_code == 401
+        assert denied.headers["www-authenticate"] == "Bearer"
+        reader.render.assert_not_called()
+
+        unavailable = client.get("/metrics", headers={"Authorization": "Bearer fake-token"})
+        assert unavailable.status_code == 503
+        assert unavailable.json()["error"]["code"] == "metrics_unavailable"
+        assert "internal database error" not in unavailable.text
+        reader.render.assert_called_once_with()
