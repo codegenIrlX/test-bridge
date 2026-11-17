@@ -5,21 +5,17 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.pool import NullPool
 
-from metrics_srv import filelocks
-from metrics_srv.repository import Repository
+from metrics_srv.domains.imports import archive_storage
+from metrics_srv.domains.imports.cleanup import ArchiveCleanup
+from metrics_srv.domains.imports.repository import ImportRepository
 
 
 @pytest.fixture
-def orphan_repository(tmp_path: Path) -> Repository:
-    engine = create_engine(
-        "sqlite://",
-        poolclass=NullPool,
-        creator=MagicMock(side_effect=AssertionError("Upload cleanup accessed the database")),
-    )
-    return Repository(SimpleNamespace(storage_path=tmp_path), engine=engine)
+def cleanup(tmp_path: Path) -> ArchiveCleanup:
+    repository = MagicMock(spec=ImportRepository)
+    repository.import_exists.return_value = False
+    return ArchiveCleanup(SimpleNamespace(storage_path=tmp_path), MagicMock(), repository)
 
 
 @pytest.fixture
@@ -32,14 +28,14 @@ def old_upload(tmp_path: Path) -> Path:
 
 
 def test_cleanup_requests_removal_of_old_unlocked_upload(
-    orphan_repository: Repository, old_upload: Path, monkeypatch: pytest.MonkeyPatch
+    cleanup: ArchiveCleanup, old_upload: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_fcntl = SimpleNamespace(LOCK_EX=2, LOCK_NB=4, flock=MagicMock())
-    monkeypatch.setattr(filelocks, "fcntl", fake_fcntl)
+    monkeypatch.setattr(archive_storage, "fcntl", fake_fcntl)
     unlink = MagicMock()
     monkeypatch.setattr(Path, "unlink", unlink)
 
-    orphan_repository.cleanup_orphans()
+    cleanup.cleanup_orphans()
 
     fake_fcntl.flock.assert_called_once()
     assert fake_fcntl.flock.call_args.args[1] == fake_fcntl.LOCK_EX | fake_fcntl.LOCK_NB
@@ -47,36 +43,36 @@ def test_cleanup_requests_removal_of_old_unlocked_upload(
 
 
 def test_cleanup_preserves_locked_upload(
-    orphan_repository: Repository, old_upload: Path, monkeypatch: pytest.MonkeyPatch
+    cleanup: ArchiveCleanup, old_upload: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_fcntl = SimpleNamespace(LOCK_EX=2, LOCK_NB=4, flock=MagicMock(side_effect=BlockingIOError))
-    monkeypatch.setattr(filelocks, "fcntl", fake_fcntl)
+    monkeypatch.setattr(archive_storage, "fcntl", fake_fcntl)
 
-    orphan_repository.cleanup_orphans()
+    cleanup.cleanup_orphans()
 
     fake_fcntl.flock.assert_called_once()
     assert old_upload.exists()
 
 
 def test_cleanup_preserves_upload_without_fcntl(
-    orphan_repository: Repository, old_upload: Path, monkeypatch: pytest.MonkeyPatch
+    cleanup: ArchiveCleanup, old_upload: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(filelocks, "fcntl", None)
+    monkeypatch.setattr(archive_storage, "fcntl", None)
 
-    orphan_repository.cleanup_orphans()
+    cleanup.cleanup_orphans()
 
     assert old_upload.exists()
 
 
 def test_cleanup_preserves_recent_upload(
-    orphan_repository: Repository, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    cleanup: ArchiveCleanup, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     upload = tmp_path / "upload-recent.tmp"
     upload.write_bytes(b"incomplete upload")
     fake_fcntl = SimpleNamespace(LOCK_EX=2, LOCK_NB=4, flock=MagicMock())
-    monkeypatch.setattr(filelocks, "fcntl", fake_fcntl)
+    monkeypatch.setattr(archive_storage, "fcntl", fake_fcntl)
 
-    orphan_repository.cleanup_orphans()
+    cleanup.cleanup_orphans()
 
     assert upload.exists()
 
@@ -84,30 +80,30 @@ def test_cleanup_preserves_recent_upload(
 def test_upload_uses_exclusive_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     upload = tmp_path / "upload-active.tmp"
     fake_fcntl = SimpleNamespace(LOCK_EX=2, flock=MagicMock())
-    monkeypatch.setattr(filelocks, "fcntl", fake_fcntl)
+    monkeypatch.setattr(archive_storage, "fcntl", fake_fcntl)
 
     with upload.open("wb") as stream:
-        filelocks.lock_upload(stream)
+        archive_storage.lock_upload(stream)
         fake_fcntl.flock.assert_called_once_with(stream.fileno(), fake_fcntl.LOCK_EX)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="flock и удаление открытого файла требуют POSIX")
 def test_cleanup_really_removes_old_unlocked_upload(
-    orphan_repository: Repository, old_upload: Path
+    cleanup: ArchiveCleanup, old_upload: Path
 ) -> None:
-    orphan_repository.cleanup_orphans()
+    cleanup.cleanup_orphans()
 
     assert not old_upload.exists()
 
 
 @pytest.mark.skipif(os.name == "nt", reason="flock и удаление открытого файла требуют POSIX")
 def test_cleanup_waits_for_actual_upload_lock(
-    orphan_repository: Repository, old_upload: Path
+    cleanup: ArchiveCleanup, old_upload: Path
 ) -> None:
     with old_upload.open("rb") as stream:
-        filelocks.lock_upload(stream)
-        orphan_repository.cleanup_orphans()
+        archive_storage.lock_upload(stream)
+        cleanup.cleanup_orphans()
         assert old_upload.exists()
 
-    orphan_repository.cleanup_orphans()
+    cleanup.cleanup_orphans()
     assert not old_upload.exists()

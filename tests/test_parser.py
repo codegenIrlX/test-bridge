@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
-from zipfile import ZipFile
+from struct import unpack_from
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 
-from metrics_srv.parser import InvalidArchiveError, parse_archive
+from metrics_srv.domains.imports.parser import InvalidArchiveError, parse_archive
 
 
 def write_archive(path: Path, entries: dict[str, str | bytes]) -> Path:
@@ -73,6 +74,41 @@ def test_parse_multiple_results_without_steps_or_times(tmp_path: Path) -> None:
     assert all(test.start is None and test.stop is None and not test.steps for test in tests)
 
 
+def test_parse_allure_status_and_opaque_history_id(tmp_path: Path) -> None:
+    archive = write_archive(
+        tmp_path / "results.zip",
+        {
+            "known-result.json": json.dumps({
+                "name": "Known",
+                "status": "unknown",
+                "historyId": "  preserved  ",
+                "steps": [{
+                    "name": "Outer",
+                    "status": "failed",
+                    "steps": [{"name": "Inner", "status": "passed"}],
+                }],
+            }),
+            "unrecognized-result.json": json.dumps({
+                "name": "Unrecognized", "status": "not-allure", "historyId": " ",
+                "steps": [{"name": "Unrecognized step", "status": {"unexpected": "value"}}],
+            }),
+            "missing-result.json": json.dumps({"name": "Missing"}),
+        },
+    )
+
+    known, unrecognized, missing = parse_archive(
+        archive, max_uncompressed_bytes=100_000, max_result_files=10,
+    )
+
+    assert known.status == "unknown" and known.history_id == "  preserved  "
+    outer, = known.steps
+    assert outer.status == "failed"
+    assert outer.steps[0].status == "passed"
+    assert unrecognized.status is None and unrecognized.history_id is None
+    assert unrecognized.steps[0].status is None
+    assert missing.status is None and missing.history_id is None
+
+
 @pytest.mark.parametrize(
     "entries",
     [
@@ -96,6 +132,52 @@ def test_corrupt_archive_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(InvalidArchiveError):
         parse_archive(archive, max_uncompressed_bytes=100_000, max_result_files=10)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        json.dumps({"name": "Example", "start": 2**63}),
+        json.dumps({"name": "Example", "steps": [{"name": "Step", "stop": 2**63}]}),
+        json.dumps({"name": "Example\x00"}),
+        json.dumps({"name": "Example", "steps": [{"name": "\ud800"}]}),
+        '{"name": "Example", "start": ' + "9" * 10_000 + "}",
+    ],
+    ids=["test-overflow", "step-overflow", "nul", "lone-surrogate", "huge-json-integer"],
+)
+def test_invalid_result_values_are_rejected(tmp_path: Path, payload: str) -> None:
+    archive = write_archive(tmp_path / "invalid.zip", {"one-result.json": payload})
+
+    with pytest.raises(InvalidArchiveError):
+        parse_archive(archive, max_uncompressed_bytes=100_000, max_result_files=10)
+
+
+def test_accepts_bigint_boundary_and_unicode_name(tmp_path: Path) -> None:
+    archive = write_archive(
+        tmp_path / "results.zip",
+        {"one-result.json": json.dumps({"name": "Проверка ✅", "start": 0, "stop": 2**63 - 1})},
+    )
+
+    test, = parse_archive(archive, max_uncompressed_bytes=100_000, max_result_files=10)
+
+    assert (test.name, test.start, test.stop) == ("Проверка ✅", 0, 2**63 - 1)
+
+
+def test_corrupt_deflate_stream_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "corrupt.zip"
+    with ZipFile(path, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("one-result.json", '{"name": "Example"}')
+        header_offset = archive.getinfo("one-result.json").header_offset
+
+    data = bytearray(path.read_bytes())
+    name_size, extra_size = unpack_from("<HH", data, header_offset + 26)
+    payload_offset = header_offset + 30 + name_size + extra_size
+    # Первые три бита 111 задают последний блок с недопустимым типом сжатия.
+    data[payload_offset] |= 0b111
+    path.write_bytes(data)
+
+    with pytest.raises(InvalidArchiveError):
+        parse_archive(path, max_uncompressed_bytes=100_000, max_result_files=10)
 
 
 def test_limits_number_of_results(tmp_path: Path) -> None:

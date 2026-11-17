@@ -14,5 +14,8 @@ default:
     max_result_files: 10000
   scheduler:
     interval_seconds: 5
+  metrics:
+    allowed_projects:
+      - qa-lab-test-framework
 
 development: {}

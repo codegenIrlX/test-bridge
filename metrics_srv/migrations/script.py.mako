@@ -11,10 +11,10 @@ depends_on = ${repr(depends_on)}
 
 
 def upgrade() -> None:
-    """Применить изменения схемы."""
+    """Применяет изменения схемы."""
     ${upgrades if upgrades else "pass"}
 
 
 def downgrade() -> None:
-    """Отменить изменения схемы."""
+    """Отменяет изменения схемы."""
     ${downgrades if downgrades else "pass"}

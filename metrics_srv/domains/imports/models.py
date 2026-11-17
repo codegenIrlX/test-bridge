@@ -1,4 +1,4 @@
-"""Модели импортов, результатов и шагов Allure."""
+"""Таблицы импортов, результатов и шагов Allure."""
 
 from datetime import datetime
 from typing import ClassVar
@@ -9,39 +9,29 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
-    MetaData,
+    Index,
+    String,
     Text,
     UniqueConstraint,
     false,
     func,
     text,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
+
+from metrics_srv.db.base import Base
+from metrics_srv.db.mixins import UUIDPrimaryKeyMixin
 
 
-class Base(DeclarativeBase):
-    """Общие метаданные моделей и миграций."""
+class ExecutionTimeMixin:
+    """Время выполнения теста или шага из Allure."""
 
-    metadata = MetaData(
-        naming_convention={
-            "pk": "pk__%(table_name)s",
-            "fk": "fk__%(table_name)s__%(column_0_N_name)s__%(referred_table_name)s",
-            "uq": "uq__%(table_name)s__%(column_0_N_name)s",
-            "ck": "ck__%(table_name)s__%(constraint_name)s",
-            "ix": "ix__%(table_name)s__%(column_0_N_name)s",
-        }
+    started_at_ms: Mapped[int | None] = mapped_column(
+        BigInteger, comment="Начало выполнения в миллисекундах Unix"
     )
-
-
-class UUIDPrimaryKeyMixin:
-    """Первичный ключ UUID, который задаёт вызывающий код."""
-
-    __id_comment__: ClassVar[str]
-
-    @declared_attr
-    def id(cls) -> Mapped[UUID]:
-        """Создать колонку ключа с описанием для конкретной таблицы."""
-        return mapped_column(primary_key=True, comment=cls.__id_comment__, sort_order=-100)
+    stopped_at_ms: Mapped[int | None] = mapped_column(
+        BigInteger, comment="Окончание выполнения в миллисекундах Unix"
+    )
 
 
 class Import(UUIDPrimaryKeyMixin, Base):
@@ -53,6 +43,12 @@ class Import(UUIDPrimaryKeyMixin, Base):
         CheckConstraint(
             "status IN ('pending', 'processing', 'completed', 'failed')",
             name="status",
+        ),
+        Index(
+            None,
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
         ),
         {"comment": "Принятые архивы Allure и состояние их обработки"},
     )
@@ -72,9 +68,28 @@ class Import(UUIDPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), comment="Время регистрации импорта"
     )
+    failed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Время перехода импорта в состояние failed"
+    )
+    archive_cleanup_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Время следующей попытки удаления архива"
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(
+        Text, comment="Ключ повторной отправки архива из CI"
+    )
+    archive_sha256: Mapped[str | None] = mapped_column(
+        Text, comment="Контрольная сумма SHA-256 архива с ключом повторной отправки"
+    )
+    project: Mapped[str | None] = mapped_column(String(255), comment="Проект Jenkins")
+    job: Mapped[str | None] = mapped_column(String(255), comment="Полное имя задания Jenkins")
+    build_number: Mapped[str | None] = mapped_column(String(255), comment="Номер сборки Jenkins")
+    build_url: Mapped[str | None] = mapped_column(String(2048), comment="Ссылка на сборку Jenkins")
+    revision: Mapped[str | None] = mapped_column(
+        String(255), comment="Ревизия исходного кода сборки"
+    )
 
 
-class TestResult(UUIDPrimaryKeyMixin, Base):
+class TestResult(UUIDPrimaryKeyMixin, ExecutionTimeMixin, Base):
     """Результат теста в принятом архиве."""
 
     __tablename__ = "test_results"
@@ -89,15 +104,11 @@ class TestResult(UUIDPrimaryKeyMixin, Base):
     )
     position: Mapped[int] = mapped_column(comment="Порядок результата в архиве")
     name: Mapped[str] = mapped_column(Text, comment="Название теста из Allure")
-    started_at_ms: Mapped[int | None] = mapped_column(
-        BigInteger, comment="Начало теста в миллисекундах Unix"
-    )
-    stopped_at_ms: Mapped[int | None] = mapped_column(
-        BigInteger, comment="Окончание теста в миллисекундах Unix"
-    )
+    status: Mapped[str | None] = mapped_column(Text, comment="Статус результата теста из Allure")
+    history_id: Mapped[str | None] = mapped_column(Text, comment="Идентификатор истории теста Allure")
 
 
-class TestStep(UUIDPrimaryKeyMixin, Base):
+class TestStep(UUIDPrimaryKeyMixin, ExecutionTimeMixin, Base):
     """Шаг теста со ссылкой на родителя при вложении."""
 
     __tablename__ = "test_steps"
@@ -114,9 +125,4 @@ class TestStep(UUIDPrimaryKeyMixin, Base):
     )
     position: Mapped[int] = mapped_column(comment="Порядок шага среди соседних шагов")
     name: Mapped[str] = mapped_column(Text, comment="Название шага из Allure")
-    started_at_ms: Mapped[int | None] = mapped_column(
-        BigInteger, comment="Начало шага в миллисекундах Unix"
-    )
-    stopped_at_ms: Mapped[int | None] = mapped_column(
-        BigInteger, comment="Окончание шага в миллисекундах Unix"
-    )
+    status: Mapped[str | None] = mapped_column(Text, comment="Статус шага из Allure")

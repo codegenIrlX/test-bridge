@@ -7,11 +7,11 @@ from alembic.config import Config
 from sqlalchemy.engine import Connection
 
 from metrics_srv.config import Settings
-from metrics_srv.database import create_database_engine
+from metrics_srv.db.session import create_database_engine
 
 
 def build_alembic_config(connection: Connection | None = None) -> Config:
-    """Найти ревизии независимо от рабочего каталога."""
+    """Находит ревизии независимо от рабочего каталога."""
     config = Config()
     location = str(Path(__file__).resolve().parent)
     config.set_main_option("script_location", location.replace("%", "%%"))
@@ -21,7 +21,7 @@ def build_alembic_config(connection: Connection | None = None) -> Config:
 
 
 def upgrade_database(settings: Settings) -> None:
-    """Применить миграции до последней ревизии."""
+    """Применяет миграции до последней ревизии."""
     engine = create_database_engine(settings)
     try:
         with engine.begin() as connection:
