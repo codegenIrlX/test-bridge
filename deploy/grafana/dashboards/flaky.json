@@ -1,0 +1,208 @@
+{
+  "uid": "testbridge-flaky",
+  "title": "TestBridge — Нестабильные тесты",
+  "tags": [
+    "testbridge",
+    "testbridge-results"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "timezone": "utc",
+  "refresh": "30s",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "title": "Дашборды TestBridge",
+      "tags": [
+        "testbridge-results"
+      ],
+      "asDropdown": true,
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "project",
+        "label": "Проект",
+        "type": "query",
+        "datasource": {
+          "uid": "testbridge-postgres",
+          "type": "postgres"
+        },
+        "definition": "SELECT DISTINCT project\nFROM public.dashboard_imports\nWHERE project IS NOT NULL\nORDER BY project",
+        "query": "SELECT DISTINCT project\nFROM public.dashboard_imports\nWHERE project IS NOT NULL\nORDER BY project",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 2,
+        "sort": 0,
+        "current": {
+          "text": "qa-lab-test-framework",
+          "value": "qa-lab-test-framework",
+          "selected": true
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Переходы между успехом и сбоем",
+      "description": "Один итог на прогон для каждого historyId. Сбой — failed или broken. skipped и unknown исключены.",
+      "datasource": {
+        "uid": "testbridge-postgres",
+        "type": "postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Прогоны"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom",
+                "value": {
+                  "align": "right",
+                  "width": 100
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Успехи"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom",
+                "value": {
+                  "align": "right",
+                  "width": 100
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Сбои"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom",
+                "value": {
+                  "align": "right",
+                  "width": 90
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Последний статус"
+            },
+            "properties": [
+              {
+                "id": "custom",
+                "value": {
+                  "width": 160
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Переходы"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom",
+                "value": {
+                  "align": "right",
+                  "width": 110
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "testbridge-postgres",
+            "type": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH comparable AS (\n    SELECT history_id, name, status, created_at, import_id, status = 'passed' AS passed\n    FROM public.dashboard_final_results\n    WHERE project = ANY(ARRAY[${project:sqlstring}]::text[])\n      AND $__timeFilter(created_at)\n      AND history_id IS NOT NULL\n      AND status IN ('passed', 'failed', 'broken')\n), ordered AS (\n    SELECT *, lag(passed) OVER (\n        PARTITION BY history_id ORDER BY created_at, import_id\n    ) AS previous_passed\n    FROM comparable\n), unstable AS (\n    SELECT (array_agg(name ORDER BY created_at DESC, import_id DESC))[1] AS \"Тест\",\n           count(*) AS \"Прогоны\",\n           count(*) FILTER (WHERE passed) AS \"Успехи\",\n           count(*) FILTER (WHERE NOT passed) AS \"Сбои\",\n           (array_agg(status ORDER BY created_at DESC, import_id DESC))[1] AS \"Последний статус\",\n           count(*) FILTER (WHERE passed <> previous_passed) AS \"Переходы\"\n    FROM ordered\n    GROUP BY history_id\n    HAVING bool_or(passed) AND bool_or(NOT passed)\n)\nSELECT * FROM unstable\nUNION ALL\nSELECT CASE\n           WHEN EXISTS (\n               SELECT 1\n               FROM comparable\n               GROUP BY history_id\n               HAVING count(DISTINCT import_id) >= 2\n           )\n               THEN 'За выбранный период нестабильные тесты не найдены'\n           ELSE 'Для сравнения нужны повторные прогоны'\n       END, NULL, NULL, NULL, NULL, NULL\nWHERE NOT EXISTS (SELECT 1 FROM unstable)\nORDER BY \"Переходы\" DESC NULLS LAST, \"Прогоны\" DESC NULLS LAST, \"Тест\""
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "md",
+        "enablePagination": true
+      }
+    }
+  ]
+}

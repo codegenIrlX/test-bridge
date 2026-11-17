@@ -57,6 +57,7 @@ def test_default_environment_merges_configuration_without_exposing_secrets(
     assert settings.database_port == 5432
     assert settings.storage_path == Path("/data/imports")
     assert settings.api_token == "test-token"
+    assert settings.metrics_projects == ()
     assert "test-password" not in repr(settings)
     assert "test-token" not in repr(settings)
 
@@ -104,4 +105,71 @@ def test_invalid_limit_is_rejected(
     config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
 
     with pytest.raises(SettingsError):
+        load_settings(config_path, secrets_path)
+
+
+@pytest.mark.parametrize("required_path", [None, "/data/imports"], ids=["local", "compose"])
+def test_configured_archive_path_is_accepted(
+    configuration_files: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    required_path: str | None,
+) -> None:
+    monkeypatch.setenv("METRICS_SRV_ENV", "development")
+    config_path, secrets_path = configuration_files
+    expected_path = required_path or "/tmp/imports"
+    if required_path is None:
+        monkeypatch.delenv("METRICS_SRV_REQUIRED_STORAGE_PATH", raising=False)
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        config["development"]["storage"] = {"path": expected_path}
+        config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    else:
+        monkeypatch.setenv("METRICS_SRV_REQUIRED_STORAGE_PATH", required_path)
+
+    assert load_settings(config_path, secrets_path).storage_path == Path(expected_path)
+
+
+def test_archive_path_outside_shared_volume_is_rejected(
+    configuration_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("METRICS_SRV_ENV", "development")
+    monkeypatch.setenv("METRICS_SRV_REQUIRED_STORAGE_PATH", "/data/imports")
+    config_path, secrets_path = configuration_files
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["development"]["storage"] = {"path": "/tmp/imports"}
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+    with pytest.raises(SettingsError, match=r"storage\.path"):
+        load_settings(config_path, secrets_path)
+
+
+def test_metrics_projects_are_read_from_selected_environment(
+    configuration_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("METRICS_SRV_ENV", "staging")
+    config_path, secrets_path = configuration_files
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["default"]["metrics"] = {"allowed_projects": ["default-project"]}
+    config["staging"]["metrics"] = {"allowed_projects": ["alpha", "beta", "alpha"]}
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+    assert load_settings(config_path, secrets_path).metrics_projects == ("alpha", "beta")
+
+
+@pytest.mark.parametrize(
+    "allowed_projects",
+    [["unknown"], ["other"], [f"project-{index}" for index in range(51)]],
+    ids=["reserved-unknown", "reserved-other", "too-many-projects"],
+)
+def test_metrics_project_allowlist_rejects_reserved_names_and_excess_entries(
+    configuration_files: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    allowed_projects: list[str],
+) -> None:
+    monkeypatch.setenv("METRICS_SRV_ENV", "development")
+    config_path, secrets_path = configuration_files
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["default"]["metrics"] = {"allowed_projects": allowed_projects}
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+    with pytest.raises(SettingsError, match=r"metrics\.allowed_projects"):
         load_settings(config_path, secrets_path)

@@ -1,0 +1,9 @@
+# Обновление TestBridge и короткая интеграция Jenkins
+
+Запустить полный стенд под именем Compose-проекта `testbridge` в `desktop-linux`, сохранив данные, очередь и архивы. Подготовить локальный Jenkinsfile для самостоятельной загрузки и прогона.
+
+- [x] **Tech-lead · Подготовка.** В `compose.yaml`, `compose.analytics.yaml` и `config.yaml` заданы имя проекта, локальные порты Redis, VictoriaMetrics и Grafana и проект Jenkins для аналитики. Пароль Grafana создан вне репозитория. Конфигурация, порты и сборка проверены до остановки прежнего проекта.
+- [x] **Tech-lead · Перенос.** В новом проекте проверены холодные копии томов PostgreSQL, Redis и ZIP. При первом запуске переиспользованы исходные образы PostgreSQL и Redis. `testbridge-orm` остановлен, его контейнеры и тома сохранены. `migrate` завершился с кодом `0`, ревизия `0003_run_analytics`.
+- [x] **Tech-lead · Приёмка.** Совпали контрольные суммы 3 исторических импортов, 4 результатов и 12 шагов. OpenAPI доступен с Windows и из агента Jenkins, Redis ответил `PONG` через порт Windows, Bull Board и VMUI ответили по HTTP. VictoriaMetrics и Grafana вернули `up=1`. Проверочный импорт `bab66d8f-e17c-46f7-b853-989d4538abfd` прошёл от `202` до `completed` с `archiveDeleted: true`. Все сервисы нового проекта запущены.
+- [x] **Tech-lead · Jenkinsfile.** В `D:/Git/qa-lab-test-framework/Jenkinsfile` добавлена функция `publishAllureToTestBridge()` с вызовом в `post.always`. Shell-блок проверен в отдельном контейнере из образа агента Jenkins. Подтверждены `202` с `importId`, повтор после `503` с теми же байтами и ключом, `409` и пропуск при пустом Allure. Загрузка файла и запуск джобы остаются за пользователем.
+- [x] **Tech-lead · Документация.** [Короткий вызов в Jenkins](../../jenkins.md) и [подключение к хранилищам и метрикам](../../configuration.md#аналитика-и-grafana) сверены с рабочей конфигурацией.

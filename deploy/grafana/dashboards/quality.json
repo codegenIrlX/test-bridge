@@ -1,0 +1,350 @@
+{
+  "uid": "testbridge-quality",
+  "title": "TestBridge — Качество прогонов",
+  "tags": [
+    "testbridge",
+    "testbridge-results"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "timezone": "utc",
+  "refresh": "30s",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "title": "Дашборды TestBridge",
+      "tags": [
+        "testbridge-results"
+      ],
+      "asDropdown": true,
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "project",
+        "label": "Проект",
+        "type": "query",
+        "datasource": {
+          "uid": "testbridge-postgres",
+          "type": "postgres"
+        },
+        "definition": "SELECT DISTINCT project\nFROM public.dashboard_imports\nWHERE project IS NOT NULL\nORDER BY project",
+        "query": "SELECT DISTINCT project\nFROM public.dashboard_imports\nWHERE project IS NOT NULL\nORDER BY project",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 2,
+        "sort": 0,
+        "current": {
+          "text": "qa-lab-test-framework",
+          "value": "qa-lab-test-framework",
+          "selected": true
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Доля успешных тестов",
+      "description": "Доля passed среди passed, failed и broken за выбранный период.",
+      "datasource": {
+        "uid": "testbridge-postgres",
+        "type": "postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "noValue": "—",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "testbridge-postgres",
+            "type": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) FILTER (WHERE status = 'passed')::double precision\n       / NULLIF(count(*) FILTER (WHERE status IN ('passed', 'failed', 'broken')), 0) AS value\nFROM public.dashboard_final_results\nWHERE project = ANY(ARRAY[${project:sqlstring}]::text[])\n  AND $__timeFilter(created_at)"
+        }
+      ],
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "orientation": "horizontal",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Повторные попытки",
+      "description": "Все результаты за период за вычетом итогов после повторов внутри импорта.",
+      "datasource": {
+        "uid": "testbridge-postgres",
+        "type": "postgres"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "testbridge-postgres",
+            "type": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT (\n    SELECT count(*)\n    FROM public.dashboard_attempts\n    WHERE project = ANY(ARRAY[${project:sqlstring}]::text[])\n      AND $__timeFilter(created_at)\n) - (\n    SELECT count(*)\n    FROM public.dashboard_final_results\n    WHERE project = ANY(ARRAY[${project:sqlstring}]::text[])\n      AND $__timeFilter(created_at)\n) AS value"
+        }
+      ],
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "orientation": "horizontal",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Завершённые импорты по дням",
+      "description": "День регистрации импорта по UTC.",
+      "datasource": {
+        "uid": "testbridge-postgres",
+        "type": "postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 10,
+        "h": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 2,
+            "fillOpacity": 35,
+            "showPoints": "always",
+            "pointSize": 5
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "testbridge-postgres",
+            "type": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT GREATEST(date_trunc('day', created_at, 'UTC'), $__timeFrom()::timestamptz) AS time, count(*) AS \"Импорты\"\nFROM public.dashboard_imports\nWHERE project = ANY(ARRAY[${project:sqlstring}]::text[])\n  AND $__timeFilter(created_at)\n  AND status = 'completed'\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Итоговые статусы по дням",
+      "description": "День регистрации импорта по UTC.",
+      "datasource": {
+        "uid": "testbridge-postgres",
+        "type": "postgres"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 5,
+        "w": 14,
+        "h": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 2,
+            "fillOpacity": 65,
+            "showPoints": "always",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "normal",
+              "group": "statuses"
+            }
+          },
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "passed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "broken"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "skipped"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "gray"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unknown"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "testbridge-postgres",
+            "type": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT GREATEST(date_trunc('day', created_at, 'UTC'), $__timeFrom()::timestamptz) AS time,\n       count(*) FILTER (WHERE status = 'passed') AS passed,\n       count(*) FILTER (WHERE status = 'failed') AS failed,\n       count(*) FILTER (WHERE status = 'broken') AS broken,\n       count(*) FILTER (WHERE status = 'skipped') AS skipped,\n       count(*) FILTER (WHERE status = 'unknown') AS unknown\nFROM public.dashboard_final_results\nWHERE project = ANY(ARRAY[${project:sqlstring}]::text[])\n  AND $__timeFilter(created_at)\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ]
+}
